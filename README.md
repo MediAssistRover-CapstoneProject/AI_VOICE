@@ -29,12 +29,17 @@ d:\AI_VOICE\
 ├── README.md                  # Hướng dẫn tổng quan
 ├── run_voice.ps1              # Script khởi động nhanh PowerShell
 ├── run_voice.bat              # Script khởi động nhanh Windows CMD
+├── run_web.ps1                # Khởi động Giao diện Web Studio (PowerShell)
+├── run_web.bat                # Khởi động Giao diện Web Studio (Windows CMD)
 ├── config/
 │   └── voice_config.json      # Cấu hình âm thanh, STT, intent, prompts
 ├── src/
 │   ├── __init__.py
 │   ├── main.py                # Entry point (hỗ trợ cả --text và voice mode)
 │   ├── voice_engine.py        # Bộ điều phối luồng Voice Pipeline toàn diện
+│   ├── web/                   # GIAO DIỆN WEB STUDIO TRỰC QUAN (FastAPI)
+│   │   ├── __init__.py
+│   │   └── app.py             # Dashboard kéo thả docx/pdf, chat voice, inspector
 │   ├── rag/                   # TẦNG RAG & VECTOR DATABASE ('VECTOR P')
 │   │   ├── __init__.py
 │   │   ├── document_loader.py # Đọc file Word (.docx), PDF, Markdown, MySQL API
@@ -66,11 +71,12 @@ d:\AI_VOICE\
 │   │   ├── so_tay_benh_nhan_mediassist.docx
 │   │   └── quy_trinh_kham_va_bac_si.md
 │   └── hospital_vector_store.json # Cơ sở dữ liệu Vector P bền vững
-├── tests/                     # 34 Unit Tests tự động (34/34 Passed)
+├── tests/                     # 40 Unit Tests tự động (40/40 Passed)
 │   ├── test_intent.py         # Test nhận diện ý định tiếng Việt (20 test cases)
 │   ├── test_rag.py            # Test RAG Pipeline & Vector DB (9 test cases)
 │   ├── test_query.py          # Test tra cứu dữ liệu bệnh viện
-│   └── test_voice_engine.py   # Test dispatching luồng Engine
+│   ├── test_voice_engine.py   # Test dispatching luồng Engine
+│   └── test_web.py            # Test toàn diện API Giao diện Web Studio (6 test cases)
 └── docs/
     ├── AI_VOICE_ARCHITECTURE_AND_INTEGRATION_GUIDE.md  # Tài liệu tích hợp hệ thống
     └── RAG_VECTOR_PIPELINE_ARCHITECTURE.md             # Tài liệu chuyên sâu về RAG & Vector P
@@ -101,19 +107,39 @@ VOICE_LANGUAGE=vi-VN
 
 ### Bước 3: Chạy Unit Tests để kiểm tra
 ```powershell
-py -3.11 -m pytest tests
-# Kết quả: 25 passed in 0.33s
+py -3.11 -m pytest tests -v
+# Kết quả: 40 passed in 6.49s
 ```
 
-### Bước 4: Khởi chạy Trợ lý Voice
+### Bước 4: Khởi chạy Trợ lý Voice & Giao diện Trực quan
 
-**Chế độ 1: Thử nghiệm bằng bàn phím (Text Mode - Không cần Microphone):**
+**Cách 1: Giao diện Web Studio Trực quan (Khuyến nghị để kiểm thử & nạp tài liệu):**
+```powershell
+# Bằng PowerShell:
+.\run_web.ps1
+
+# Hoặc bằng file BAT:
+run_web.bat
+```
+Truy cập trình duyệt tại: **`http://localhost:7860`**
+- Kéo thả file Word (`.docx`), PDF (`.pdf`), Markdown (`.md`) trực tiếp vào màn hình.
+- AI tự động cắt đoạn (chunking), tính toán vector và nạp vào Vector Database ("Vector P") tức thì.
+- Thử nghiệm gõ hỏi đáp, nói qua micro trình duyệt hoặc phát giọng nói ra loa laptop.
+- Xem chi tiết Intent, độ tin cậy và trích dẫn tài liệu gốc.
+
+**Cách 2: Menu điều khiển tổng hợp `run_voice.bat`:**
+Chạy `run_voice.bat` và chọn:
+- `1` : Voice Mode (Microphone + Loa Laptop)
+- `2` : Text Mode (Bàn phím Console)
+- `3` : Web GUI Studio (`http://localhost:7860`)
+- `4` : Chạy toàn bộ 40 Unit Tests
+
+**Cách 3: Chế độ Console bàn phím (Text Mode):**
 ```powershell
 py -3.11 -m src.main --text
 ```
-*Nhập câu hỏi như: "Bệnh viện mấy giờ mở cửa?", "Dẫn tôi đến nhà thuốc", "Chi phí khám bệnh ra sao?"*
 
-**Chế độ 2: Chế độ Giọng nói thực tế (Voice Mode qua Microphone & Loa):**
+**Cách 4: Chế độ Giọng nói thực tế (Voice Mode qua Microphone & Loa):**
 ```powershell
 py -3.11 -m src.main
 ```
