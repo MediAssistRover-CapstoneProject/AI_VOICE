@@ -1,0 +1,39 @@
+{
+  "workflow": {
+    "workflowCode": "WF_MAP_ENDPOINT_MOVE",
+    "versionNo": 1,
+    "workflowName": "Đi tới endpoint trên map đã lưu",
+    "serviceType": "NAVIGATION",
+    "description": "Một step MOVE qua BE/MQTT tới endpoint thật, tốc độ tối đa 0,05 m/s. Không chạy trực tiếp cmd_vel từ web.",
+    "inputSchemaJson": {
+      "type": "object",
+      "properties": {
+        "map_id": {"type": "string", "format": "uuid"},
+        "target_mode": {"type": "string", "const": "ENDPOINT"},
+        "endpoint_id": {"type": "string", "format": "uuid"}
+      },
+      "required": ["map_id", "target_mode", "endpoint_id"],
+      "additionalProperties": true
+    },
+    "inputUiJson": {}, "defaultInputsJson": {},
+    "outputMappingJson": {"move_result": {"$ref": "/outputs/MOVE_TO_ENDPOINT"}},
+    "requiredCapabilitiesJson": ["MOVE"],
+    "maxDurationSec": 300, "maxTotalVisits": 1, "graphVersion": 3, "schemaVersion": 3
+  },
+  "graph": {
+    "startStepCode": "MOVE_TO_ENDPOINT",
+    "tasks": [{"taskCode": "NAVIGATE", "taskName": "Đi tới điểm đích", "sequenceNo": 1, "configJson": {}}],
+    "steps": [{
+      "taskCode": "NAVIGATE", "stepType": "MOVE", "stepCode": "MOVE_TO_ENDPOINT",
+      "stepName": "Đi và quay theo hướng endpoint", "sequenceNo": 1,
+      "paramsJson": {"mode": "NORMAL", "max_speed_mps": 0.05},
+      "inputMappingJson": {"map_id": {"$ref": "/inputs/map_id"}, "endpoint_id": {"$ref": "/inputs/endpoint_id"}},
+      "timeoutSec": 180, "maxAttempts": 1, "retryDelaySec": 0, "retryCodesJson": [], "maxVisits": 1, "auditLevel": "FULL"
+    }],
+    "transitions": [
+      {"fromStepCode": "MOVE_TO_ENDPOINT", "outcome": "SUCCESS", "priority": 1, "defaultTransition": true, "terminalStatus": "SUCCEEDED"},
+      {"fromStepCode": "MOVE_TO_ENDPOINT", "outcome": "FAILURE", "priority": 1, "defaultTransition": true, "terminalStatus": "FAILED"},
+      {"fromStepCode": "MOVE_TO_ENDPOINT", "outcome": "TIMEOUT", "priority": 1, "defaultTransition": true, "terminalStatus": "RECOVERY_REQUIRED"}
+    ]
+  }
+}

@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>MediAssist — Kho tri thức</title>
+    <link rel="icon" href="/favicon.svg" />
+    <link rel="stylesheet" href="/assistant.css" />
+  </head>
+  <body>
+    <header>
+      <div class="brand">
+        <div class="logo">K</div>
+        <div>
+          <h1>Kho tri thức MediAssist</h1>
+          <p>Upload · OCR · RAG · phiên bản</p>
+        </div>
+      </div>
+      <span class="badge">ADMIN</span>
+    </header>
+    <main class="grid">
+      <form class="card stack" onsubmit="return false">
+        <h2>Tải tài liệu mới</h2>
+        <label
+          >JWT quản trị<input
+            id="token"
+            type="password"
+            autocomplete="current-password"
+            placeholder="Bearer token" /></label
+        ><label
+          >Tệp<input
+            id="file"
+            type="file"
+            accept=".pdf,.docx,.jpg,.jpeg,.png" /></label
+        ><label>Tiêu đề<input id="title" /></label
+        ><label>Danh mục<input id="category" value="HOSPITAL_INFO" /></label>
+        <div class="row">
+          <label
+            >Ngôn ngữ<select id="language">
+              <option>vi-VN</option>
+              <option>en-US</option>
+            </select></label
+          ><label
+            >Quyền xem<select id="visibility">
+              <option>PUBLIC</option>
+              <option>INTERNAL</option>
+            </select></label
+          >
+        </div>
+        <label
+          >Thay thế document ID<input
+            id="replaces"
+            placeholder="Để trống nếu là tài liệu mới" /></label
+        ><button id="upload">Upload và xử lý</button>
+        <div id="state" class="status"></div>
+      </form>
+      <section class="card">
+        <div class="row">
+          <h2 style="flex: 1">Tài liệu</h2>
+          <button class="secondary" id="reload">Làm mới</button>
+        </div>
+        <div style="overflow: auto">
+          <table>
+            <thead>
+              <tr>
+                <th>Tài liệu</th>
+                <th>Phạm vi</th>
+                <th>Trạng thái</th>
+                <th>Cập nhật</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="rows"></tbody>
+          </table>
+        </div>
+        <h2 style="margin-top: 20px">OCR / chunks</h2>
+        <div id="detail" class="detail">
+          Chọn “Xem” để kiểm tra nội dung đã trích xuất.
+        </div>
+      </section>
+    </main>
+    <script>
+      const $ = (id) => document.getElementById(id),
+        headers = () => ({ Authorization: "Bearer " + $("token").value });
+      async function call(url, opt = {}) {
+        opt.headers = { ...headers(), ...(opt.headers || {}) };
+        const r = await fetch(url, opt);
+        if (!r.ok)
+          throw new Error(
+            (await r.json().catch(() => ({ message: r.statusText }))).message ||
+              r.statusText,
+          );
+        return r.status === 204 ? null : r.json();
+      }
+      async function load() {
+        try {
+          const docs = await call("/api/v1/admin/knowledge/documents");
+          $("rows").innerHTML = docs
+            .map(
+              (d) =>
+                `<tr><td><b>${e(d.title)}</b><br><small>${e(d.category)} · ${e(d.filename || "")}</small></td><td>${d.visibility}</td><td><span class="pill ${d.status.toLowerCase()}">${d.status}</span></td><td>${new Date(d.updatedAt).toLocaleString()}</td><td><button class="secondary" onclick="view('${d.id}')">Xem</button> <button class="secondary" onclick="reindex('${d.id}')">Re-index</button> <button class="warn" onclick="archiveDoc('${d.id}')">Archive</button></td></tr>`,
+            )
+            .join("");
+        } catch (x) {
+          $("state").textContent = x.message;
+        }
+      }
+      $("reload").onclick = load;
+      $("upload").onclick = async () => {
+        const f = $("file").files[0];
+        if (!f) return;
+        const data = new FormData();
+        data.append("file", f);
+        ["title", "category", "language", "visibility"].forEach((k) =>
+          data.append(k, $(k).value),
+        );
+        if ($("replaces").value)
+          data.append("replacesDocumentId", $("replaces").value);
+        $("state").textContent = "Đang upload…";
+        try {
+          await call("/api/v1/admin/knowledge/documents", {
+            method: "POST",
+            body: data,
+          });
+          $("state").textContent = "Đã nhận tệp. Pipeline sẽ tự xử lý.";
+          load();
+        } catch (x) {
+          $("state").textContent = x.message;
+        }
+      };
+      async function view(id) {
+        const d = await call("/api/v1/admin/knowledge/documents/" + id);
+        $("detail").textContent =
+          `${d.title}\nStatus: ${d.status}\nMethod: ${d.extractionMethod || "-"}\nPages: ${d.pageCount || "-"}\nError: ${d.errorCode || "-"} ${d.errorMessage || ""}\n\nPREVIEW\n${d.preview || ""}\n\nCHUNKS: ${d.chunks.length}\n` +
+          d.chunks
+            .map((c) => `\n#${c.index} ${c.locator || ""}\n${c.content}`)
+            .join("\n");
+      }
+      async function reindex(id) {
+        await call(`/api/v1/admin/knowledge/documents/${id}/reindex`, {
+          method: "POST",
+        });
+        load();
+      }
+      async function archiveDoc(id) {
+        if (confirm("Archive tài liệu này?")) {
+          await call("/api/v1/admin/knowledge/documents/" + id, {
+            method: "DELETE",
+          });
+          load();
+        }
+      }
+      function e(s) {
+        return String(s ?? "").replace(
+          /[&<>"']/g,
+          (c) =>
+            ({
+              "&": "&amp;",
+              "<": "&lt;",
+              ">": "&gt;",
+              '"': "&quot;",
+              "'": "&#39;",
+            })[c],
+        );
+      }
+    </script>
+  </body>
+</html>

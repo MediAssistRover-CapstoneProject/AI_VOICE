@@ -1,0 +1,9 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>mediassist_voice_bridge</name><version>0.1.0</version>
+  <description>Safe ROS 2 voice bridge between MentorPi M1 audio hardware and MediAssist backend.</description>
+  <maintainer email="dev@mediassist.local">MediAssist</maintainer><license>Apache-2.0</license>
+  <buildtool_depend>ament_python</buildtool_depend>
+  <exec_depend>rclpy</exec_depend><exec_depend>std_msgs</exec_depend><exec_depend>std_srvs</exec_depend><exec_depend>python3-requests</exec_depend>
+  <export><build_type>ament_python</build_type></export>
+</package>

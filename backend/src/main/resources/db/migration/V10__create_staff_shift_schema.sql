@@ -1,0 +1,40 @@
+CREATE TABLE `Shift` (
+    `shift_id` BINARY(16) NOT NULL,
+    `staff_profile_id` BINARY(16) NOT NULL,
+    `room_id` BINARY(16) NOT NULL,
+    `shift_code` VARCHAR(64) NOT NULL,
+    `shift_name` VARCHAR(100) NOT NULL,
+    `starts_at` DATETIME(6) NOT NULL,
+    `ends_at` DATETIME(6) NOT NULL,
+    `status` VARCHAR(20) NOT NULL,
+    `note` TEXT NULL,
+    `created_at` DATETIME(6) NOT NULL,
+    `updated_at` DATETIME(6) NOT NULL,
+    PRIMARY KEY (`shift_id`),
+    CONSTRAINT `UQ_Shift_code` UNIQUE (`shift_code`),
+    CONSTRAINT `FK_Shift_staff_profile` FOREIGN KEY (`staff_profile_id`) REFERENCES `StaffProfile` (`staff_profile_id`),
+    CONSTRAINT `FK_Shift_room` FOREIGN KEY (`room_id`) REFERENCES `Room` (`room_id`),
+    CONSTRAINT `CK_Shift_period` CHECK (`starts_at` < `ends_at`),
+    CONSTRAINT `CK_Shift_status` CHECK (`status` IN ('PLANNED', 'ACTIVE', 'COMPLETED', 'CANCELLED')),
+    INDEX `IX_Shift_staff_period` (`staff_profile_id`, `starts_at`, `ends_at`),
+    INDEX `IX_Shift_room_period` (`room_id`, `starts_at`, `ends_at`),
+    INDEX `IX_Shift_status_start` (`status`, `starts_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `Slot` (
+    `slot_id` BINARY(16) NOT NULL,
+    `shift_id` BINARY(16) NOT NULL,
+    `sequence_no` INT NOT NULL,
+    `starts_at` DATETIME(6) NOT NULL,
+    `ends_at` DATETIME(6) NOT NULL,
+    `status` VARCHAR(20) NOT NULL,
+    `note` TEXT NULL,
+    `created_at` DATETIME(6) NOT NULL,
+    PRIMARY KEY (`slot_id`),
+    CONSTRAINT `UQ_Slot_shift_sequence` UNIQUE (`shift_id`, `sequence_no`),
+    CONSTRAINT `FK_Slot_shift` FOREIGN KEY (`shift_id`) REFERENCES `Shift` (`shift_id`) ON DELETE CASCADE,
+    CONSTRAINT `CK_Slot_sequence` CHECK (`sequence_no` >= 1),
+    CONSTRAINT `CK_Slot_period` CHECK (`starts_at` < `ends_at`),
+    CONSTRAINT `CK_Slot_status` CHECK (`status` IN ('AVAILABLE', 'BLOCKED', 'CLOSED')),
+    INDEX `IX_Slot_shift_period` (`shift_id`, `starts_at`, `ends_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

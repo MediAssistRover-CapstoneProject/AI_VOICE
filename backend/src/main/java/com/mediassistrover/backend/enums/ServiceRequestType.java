@@ -1,0 +1,14 @@
+package com.mediassistrover.backend.enums;
+public enum ServiceRequestType {
+    INFORMATION,
+    NAVIGATION,
+    ESCORT,
+    DELIVERY,
+    EMERGENCY_SOS,
+    CROWD_MONITORING,
+    FALL_DETECTION_RESPONSE,
+    RESTRICTED_AREA_MONITORING,
+    AUTO_CHARGING,
+    NAVIGATION_RECOVERY,
+    ROBOT_STARTUP_STANDBY
+}

@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>MediAssist — Staff Assistant</title>
+    <link rel="icon" href="/favicon.svg" />
+    <link rel="stylesheet" href="/assistant.css" />
+  </head>
+  <body>
+    <header>
+      <div class="brand">
+        <div class="logo">S</div>
+        <div>
+          <h1>MediAssist Staff</h1>
+          <p>Tra cứu nguồn nội bộ bệnh viện</p>
+        </div>
+      </div>
+      <span class="badge">STAFF · ADMIN</span>
+    </header>
+    <main class="grid">
+      <form class="card stack" onsubmit="return false">
+        <h2>Phiên nhân viên</h2>
+        <label
+          >Tên đăng nhập<input id="username" autocomplete="username"
+        /></label>
+        <label
+          >Mật khẩu<input
+            id="password"
+            type="password"
+            autocomplete="current-password"
+        /></label>
+        <button id="login" class="secondary">Đăng nhập STAFF</button>
+        <label
+          >JWT<input
+            id="token"
+            type="password"
+            autocomplete="current-password" /></label
+        ><label>Robot ID<input id="robot" /></label
+        ><label
+          >Ngôn ngữ<select id="lang">
+            <option>vi-VN</option>
+            <option>en-US</option>
+          </select></label
+        ><button id="start">Mở phiên nội bộ</button>
+        <div id="state" class="status"></div>
+        <div id="changeBox" class="stack hidden">
+          <div class="notice">
+            Tài khoản mới phải đổi mật khẩu tạm trước khi mở phiên.
+          </div>
+          <label
+            >Mật khẩu mới<input
+              id="newPassword"
+              type="password"
+              autocomplete="new-password"
+              minlength="8"
+          /></label>
+          <button id="changePassword" class="warn">
+            Đổi mật khẩu và đăng nhập lại
+          </button>
+        </div>
+        <div class="notice">
+          Có thể truy vấn nguồn INTERNAL. Không nhập thông tin định danh hoặc hồ
+          sơ bệnh nhân.
+        </div>
+      </form>
+      <section class="card">
+        <div id="chat" class="conversation">
+          <div class="empty">Mở phiên để tra cứu.</div>
+        </div>
+        <div class="composer row">
+          <textarea id="text" disabled></textarea
+          ><button id="send" disabled>Gửi</button>
+        </div>
+      </section>
+    </main>
+    <script>
+      let sid;
+      const $ = (x) => document.getElementById(x);
+      async function api(u, o = {}) {
+        o.headers = {
+          Authorization: "Bearer " + $("token").value,
+          ...(o.headers || {}),
+        };
+        const r = await fetch(u, o);
+        if (!r.ok)
+          throw new Error(
+            (await r.json().catch(() => ({ message: r.statusText }))).message ||
+              r.statusText,
+          );
+        return r.json();
+      }
+      async function login(password = $("password").value) {
+        const r = await fetch("/api/v1/auth/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            username: $("username").value.trim(),
+            password,
+            deviceInfo: "Assistant Staff Web",
+          }),
+        });
+        const body = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(body.message || r.statusText);
+        $("token").value = body.accessToken;
+        $("password").value = password;
+        $("changeBox").classList.toggle("hidden", !body.mustChangePassword);
+        $("state").textContent = body.mustChangePassword
+          ? "Đăng nhập thành công — cần đổi mật khẩu tạm"
+          : "Đăng nhập thành công";
+        return body;
+      }
+      $("login").onclick = async () => {
+        try {
+          await login();
+        } catch (e) {
+          $("state").textContent = e.message;
+        }
+      };
+      $("changePassword").onclick = async () => {
+        const next = $("newPassword").value;
+        if (next.length < 8) {
+          $("state").textContent = "Mật khẩu mới phải có ít nhất 8 ký tự";
+          return;
+        }
+        try {
+          const r = await fetch("/api/v1/auth/change-password", {
+            method: "PUT",
+            headers: {
+              Authorization: "Bearer " + $("token").value,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              currentPassword: $("password").value,
+              newPassword: next,
+            }),
+          });
+          const body = await r.json().catch(() => ({}));
+          if (!r.ok) throw new Error(body.message || r.statusText);
+          await login(next);
+          $("changeBox").classList.add("hidden");
+          $("newPassword").value = "";
+          $("state").textContent = "Đã đổi mật khẩu và cấp access token mới";
+        } catch (e) {
+          $("state").textContent = e.message;
+        }
+      };
+      $("start").onclick = async () => {
+        try {
+          const s = await api("/api/v1/assistant/sessions", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              robotId: $("robot").value,
+              language: $("lang").value,
+            }),
+          });
+          sid = s.sessionId;
+          $("text").disabled = $("send").disabled = false;
+          $("chat").innerHTML = "";
+          $("state").textContent = "Đã mở phiên INTERNAL";
+        } catch (e) {
+          $("state").textContent = e.message;
+        }
+      };
+      $("send").onclick = async () => {
+        const q = $("text").value.trim();
+        if (!q) return;
+        add("user", q);
+        $("text").value = "";
+        $("send").disabled = true;
+        try {
+          const t = await api(`/api/v1/assistant/sessions/${sid}/turns`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Idempotency-Key": crypto.randomUUID(),
+            },
+            body: JSON.stringify({ text: q }),
+          });
+          add(
+            "bot",
+            `<b>${esc(t.answer)}</b><small>${t.groundingMode}</small>` +
+              (t.warnings || [])
+                .map((w) => `<div class="notice">${esc(w)}</div>`)
+                .join("") +
+              (t.citations || [])
+                .map(
+                  (c) =>
+                    `<div class="source">[${c.ordinal}] ${esc(c.title)} · ${esc(c.locator || "")}</div>`,
+                )
+                .join(""),
+            true,
+          );
+        } catch (e) {
+          add("bot", e.message);
+        } finally {
+          $("send").disabled = false;
+        }
+      };
+      function add(k, s, raw = false) {
+        $("chat").querySelector(".empty")?.remove();
+        const d = document.createElement("div");
+        d.className = "message " + k;
+        raw ? (d.innerHTML = s) : (d.textContent = s);
+        $("chat").append(d);
+        $("chat").scrollTop = $("chat").scrollHeight;
+      }
+      function esc(s) {
+        return String(s ?? "").replace(
+          /[&<>"']/g,
+          (c) =>
+            ({
+              "&": "&amp;",
+              "<": "&lt;",
+              ">": "&gt;",
+              '"': "&quot;",
+              "'": "&#39;",
+            })[c],
+        );
+      }
+    </script>
+  </body>
+</html>

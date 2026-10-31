@@ -1,0 +1,13 @@
+package com.mediassistrover.backend.controller.assistant;
+import com.mediassistrover.backend.assistant.*;import com.mediassistrover.backend.assistant.AssistantDtos.*;import com.mediassistrover.backend.security.AccountPrincipal;
+import lombok.RequiredArgsConstructor;import org.springframework.http.*;import org.springframework.security.access.prepost.PreAuthorize;import org.springframework.security.core.annotation.AuthenticationPrincipal;import org.springframework.web.bind.annotation.*;import org.springframework.web.multipart.MultipartFile;import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;import java.util.UUID;
+@RestController @RequestMapping("/api/v1/assistant") @RequiredArgsConstructor @PreAuthorize("hasAnyRole('STAFF','ADMIN')")
+public class StaffAssistantController {private final AssistantService service;
+ @PostMapping("/sessions") @ResponseStatus(HttpStatus.CREATED) public SessionResponse session(@RequestBody CreateSessionRequest r,@AuthenticationPrincipal AccountPrincipal a){return service.createStaffSession(r,a);}
+ @PostMapping("/sessions/{id}/turns") public TurnResponse text(@PathVariable UUID id,@RequestHeader(value="Idempotency-Key",required=false)String key,@RequestBody TextTurnRequest r,@AuthenticationPrincipal AccountPrincipal a){return service.textTurn(id,r.text(),key,"STAFF",a);}
+ @PostMapping(value="/sessions/{id}/turns",consumes=MediaType.MULTIPART_FORM_DATA_VALUE) public TurnResponse audio(@PathVariable UUID id,@RequestHeader(value="Idempotency-Key",required=false)String key,@RequestPart("audio") MultipartFile f,@AuthenticationPrincipal AccountPrincipal a)throws Exception{return service.audioTurn(id,f.getBytes(),f.getOriginalFilename(),key,"STAFF",a);}
+ @GetMapping("/turns/{id}") public TurnResponse get(@PathVariable UUID id,@AuthenticationPrincipal AccountPrincipal a){return service.getTurn(id,"STAFF",a);}
+ @GetMapping(value="/turns/{id}/events",produces=MediaType.TEXT_EVENT_STREAM_VALUE) public SseEmitter events(@PathVariable UUID id,@AuthenticationPrincipal AccountPrincipal a)throws Exception{SseEmitter e=new SseEmitter(5000L);e.send(SseEmitter.event().name("turn").data(service.getTurn(id,"STAFF",a)));e.complete();return e;}
+ @PostMapping("/turns/{id}/confirm") public TurnResponse confirm(@PathVariable UUID id,@RequestBody ConfirmRequest r,@AuthenticationPrincipal AccountPrincipal a){return service.confirm(id,r.nonce(),"STAFF",a);}
+ @GetMapping(value="/turns/{id}/audio",produces="audio/wav") public ResponseEntity<byte[]> audio(@PathVariable UUID id,@AuthenticationPrincipal AccountPrincipal a){TurnResponse t=service.getTurn(id,"STAFF",a);return ResponseEntity.ok().header("X-Audio-SHA256",t.audioSha256()==null?"":t.audioSha256()).body(service.audio(id,"STAFF",a));}
+}

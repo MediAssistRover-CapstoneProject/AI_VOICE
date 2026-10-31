@@ -1,0 +1,379 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mediassistrover.invalid/contracts/phase0/pi-step-inputs.schema.json",
+  "title": "Resolved Pi params grouped by StepType",
+  "$comment": "Reconstructed from BE handoff Markdown 11/10/2026; original Pi schemas/source NOT verified. Phase 0 reference artifacts only; not connected to runtime validators.",
+  "x-provenance": {
+    "status": "RECONSTRUCTED_UNVERIFIED_PI",
+    "sources": [
+      "../01_Giao_tiep_va_toan_bo_field.md",
+      "../02_Input_Output_11_Step_Type.md"
+    ],
+    "baselineDate": "2026-10-12"
+  },
+  "oneOf": [
+    {
+      "type": "object",
+      "properties": {
+        "stepType": {
+          "const": "MOVE"
+        },
+        "params": {
+          "$ref": "pi-step-inputs.schema.json#/$defs/MOVE"
+        }
+      },
+      "required": [
+        "stepType",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "stepType": {
+          "const": "CONTROL_HARDWARE"
+        },
+        "params": {
+          "$ref": "pi-step-inputs.schema.json#/$defs/CONTROL_HARDWARE"
+        }
+      },
+      "required": [
+        "stepType",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "stepType": {
+          "const": "EXECUTE_SENSING"
+        },
+        "params": {
+          "$ref": "pi-step-inputs.schema.json#/$defs/EXECUTE_SENSING"
+        }
+      },
+      "required": [
+        "stepType",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "stepType": {
+          "const": "WAIT"
+        },
+        "params": {
+          "$ref": "pi-step-inputs.schema.json#/$defs/WAIT"
+        }
+      },
+      "required": [
+        "stepType",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "stepType": {
+          "const": "INTERACT"
+        },
+        "params": {
+          "$ref": "pi-step-inputs.schema.json#/$defs/INTERACT"
+        }
+      },
+      "required": [
+        "stepType",
+        "params"
+      ],
+      "additionalProperties": false
+    }
+  ],
+  "$defs": {
+    "MOVE": {
+      "type": "object",
+      "properties": {
+        "map_id": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        },
+        "endpoint_id": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        },
+        "mode": {
+          "enum": [
+            "NORMAL",
+            "ESCORT",
+            "PATROL"
+          ]
+        },
+        "max_speed_mps": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 0.3
+        }
+      },
+      "required": [
+        "map_id",
+        "endpoint_id",
+        "mode",
+        "max_speed_mps"
+      ],
+      "additionalProperties": false
+    },
+    "CONTROL_HARDWARE": {
+      "type": "object",
+      "properties": {
+        "compartment_id": {
+          "const": "CART_MAIN"
+        },
+        "action": {
+          "enum": [
+            "LOCK_COMPARTMENT",
+            "UNLOCK_COMPARTMENT"
+          ]
+        },
+        "authorization": {
+          "type": "object",
+          "properties": {
+            "mode": {
+              "const": "STAFF_VERIFIED"
+            },
+            "verification_id": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+            },
+            "actor_account_id": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+            },
+            "purpose": {
+              "enum": [
+                "DELIVERY_SENDER",
+                "DELIVERY_RECEIVER"
+              ]
+            },
+            "valid_until": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          "required": [
+            "mode",
+            "verification_id",
+            "actor_account_id",
+            "purpose",
+            "valid_until"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "compartment_id",
+        "action"
+      ],
+      "additionalProperties": false
+    },
+    "EXECUTE_SENSING": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "sensing_type": {
+              "enum": [
+                "ROBOT_HEALTH",
+                "SIDE_CLEARANCE"
+              ]
+            }
+          },
+          "required": [
+            "sensing_type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "sensing_type": {
+              "enum": [
+                "CROWD_DENSITY",
+                "RESTRICTED_ZONE"
+              ]
+            },
+            "zone_id": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+            },
+            "window_sec": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 30,
+              "default": 0
+            }
+          },
+          "required": [
+            "sensing_type",
+            "zone_id"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "sensing_type": {
+              "const": "MAPPING"
+            },
+            "action": {
+              "const": "START"
+            },
+            "mapping_session_id": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+            },
+            "preview_rate_hz": {
+              "type": "number",
+              "minimum": 0.2,
+              "maximum": 1,
+              "default": 1
+            }
+          },
+          "required": [
+            "sensing_type",
+            "action",
+            "mapping_session_id"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "sensing_type": {
+              "const": "MAPPING"
+            },
+            "action": {
+              "const": "SAVE"
+            },
+            "mapping_session_id": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+            },
+            "artifact_id": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+            }
+          },
+          "required": [
+            "sensing_type",
+            "action",
+            "mapping_session_id",
+            "artifact_id"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "sensing_type": {
+              "const": "MAPPING"
+            },
+            "action": {
+              "const": "STOP"
+            },
+            "mapping_session_id": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+            }
+          },
+          "required": [
+            "sensing_type",
+            "action",
+            "mapping_session_id"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "WAIT": {
+      "type": "object",
+      "properties": {
+        "wait_type": {
+          "const": "DURATION"
+        },
+        "duration_sec": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 3600
+        }
+      },
+      "required": [
+        "wait_type",
+        "duration_sec"
+      ],
+      "additionalProperties": false
+    },
+    "INTERACT": {
+      "type": "object",
+      "properties": {
+        "prompt_key": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        },
+        "action": {
+          "const": "SPEAK"
+        },
+        "data": {
+          "type": "object",
+          "properties": {
+            "text": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 500,
+              "pattern": "\\S"
+            },
+            "language_code": {
+              "enum": [
+                "vi",
+                "en"
+              ]
+            },
+            "speed_wpm": {
+              "type": "integer",
+              "minimum": 80,
+              "maximum": 220
+            },
+            "volume": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 100
+            }
+          },
+          "required": [
+            "text"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "prompt_key",
+        "action",
+        "data"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

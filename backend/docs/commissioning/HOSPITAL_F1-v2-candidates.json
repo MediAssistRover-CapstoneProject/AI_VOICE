@@ -1,0 +1,40 @@
+{
+  "mapCode": "HOSPITAL_F1",
+  "version": 2,
+  "asset": {
+    "yaml": "classpath:/static/map-assets/HOSPITAL_F1/v2/map.yaml",
+    "pgmSha256": "8104019e8643dc1e26c158be883e04f2d9eb347b99b5ccb63fc0b9c136e2145b",
+    "widthPixels": 1200,
+    "heightPixels": 720,
+    "resolutionMetersPerPixel": 0.004167,
+    "origin": [0.0, 0.0, 0.0]
+  },
+  "candidates": [
+    {
+      "candidateCode": "EP_GAZEBO_NORTH_04",
+      "displayName": "Gazebo North 04",
+      "xM": 3.5,
+      "yM": 2.125,
+      "yawRad": null,
+      "endpointId": null,
+      "roomId": null,
+      "active": false,
+      "accessible": false,
+      "commissioningState": "STATIC_MAP_ONLY",
+      "evidence": {
+        "pgmPixel": [840, 209],
+        "pgmValue": 254,
+        "rawClearanceMeters": 0.2926,
+        "sameRawFreeComponentAsPriorRobotPose": true,
+        "nav2PlanVerified": false,
+        "footprintAndInflationVerified": false,
+        "doorAndRoomMetadataVerified": false
+      }
+    }
+  ],
+  "notCreated": [
+    "ROOM_01", "ROOM_02", "ROOM_03", "ROOM_04", "ROOM_05", "ROOM_06", "ROOM_07",
+    "ROOM_08", "ROOM_09", "ROOM_10", "ROOM_11", "ROOM_12", "ROOM_13", "ROOM_14"
+  ],
+  "reason": "The repository has no authoritative room/door metadata or recorded Nav2 plans. Candidates must not become live Endpoint rows until supervised commissioning succeeds."
+}

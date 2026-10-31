@@ -1,0 +1,902 @@
+<!doctype html>
+<html lang="vi"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Quét bản đồ robot</title>
+<!-- BEGIN_NAVIGATION_STYLE -->
+<style>
+#mapNavigation .nav-layout{display:grid;grid-template-columns:minmax(0,2fr) minmax(260px,1fr);gap:20px}
+#mapNavigation .nav-map-wrap{display:flex;justify-content:center;align-items:start;background:#e7e7e7;min-height:180px;padding:8px;overflow:auto}
+#mapNavigation canvas{display:block;max-width:100%;height:auto;touch-action:none;cursor:crosshair;image-rendering:pixelated}
+#mapNavigation select,#mapNavigation input{width:100%;padding:9px;border:1px solid #999;border-radius:4px;background:#fff}
+#mapNavigation .nav-inline{display:flex;gap:8px;align-items:end;flex-wrap:wrap}
+#mapNavigation .nav-inline label{flex:1;min-width:180px}
+#mapNavigation .nav-status{padding:10px;background:#eef4ff;white-space:pre-line;line-height:1.5}
+#mapNavigation .nav-error{color:#a51d1d}
+#mapNavigation .nav-legend{display:flex;gap:16px;flex-wrap:wrap;font-size:13px;margin:10px 0}
+#mapNavigation .nav-legend span::before{content:'●';margin-right:5px;color:var(--marker)}
+#mapNavigation #navMove{background:#125cb0;color:#fff}
+#mapNavigation #navCancel{background:#292929;color:#fff}
+#mapNavigation code{overflow-wrap:anywhere}
+@media(max-width:800px){#mapNavigation .nav-layout{grid-template-columns:1fr}}
+
+</style>
+<!-- END_NAVIGATION_STYLE -->
+<style>
+[hidden]{display:none!important}*{box-sizing:border-box}body{margin:24px auto;padding:0 20px;max-width:1200px;font:16px system-ui;color:#171717;background:#fafafa}h1{font-size:25px}label{display:block;font-size:13px;margin:8px 0}input{width:100%;padding:9px;border:1px solid #999;border-radius:4px}button{padding:10px 16px;margin:5px 5px 5px 0;background:white;border:1px solid #555;border-radius:4px;cursor:pointer}button:disabled{opacity:.45;cursor:default}.row{display:flex;gap:20px;align-items:start}.main{flex:3;min-width:0}.side{flex:1;min-width:250px}.panel{padding:16px;border:1px solid #bbb;background:white;margin:12px 0}.fields{display:grid;grid-template-columns:1fr 1fr;gap:12px}.map{width:100%;max-height:650px;object-fit:contain;background:#ddd;image-rendering:pixelated}.camera{width:100%;background:#ddd}small{display:block;color:#555;margin:8px 0}pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:250px;overflow:auto;font-size:13px}#notice{min-height:25px;font-weight:600}#stop{background:#222;color:white} @media(max-width:800px){.row{display:block}.fields{grid-template-columns:1fr}}
+</style>
+<h1>Quét bản đồ robot</h1>
+<p>Map cập nhật tối đa 1 giây/lần. Video mượt dùng server camera hãng cổng 8080. Ảnh MQTT là tùy chọn băng thông thấp.</p>
+<details class="panel" open><summary>Kết nối nhiệm vụ</summary>
+<label>Access token ADMIN (chỉ giữ trong trang hiện tại)<input id="token" type="password" autocomplete="off" placeholder="Dán accessToken sau khi đăng nhập Swagger"></label>
+<div class="fields"><label>Robot ID<input id="robot" value="0e3f1083-2546-4f45-8004-5eda5cb75a6f"></label><label>Workflow ID — đã publish<input id="workflow"></label><label>Floor ID<input id="floor"></label><label>Tên bản đồ<input id="mapName" value="Ban do demo"></label></div>
+<button id="prepareMapping">Chuẩn bị workflow quét và lưu</button><small>Workflow lưu bản đồ trên Pi, upload HTTPS rồi đăng ký Map trong hệ thống.</small>
+<button id="create">Tạo nhiệm vụ quét</button>
+<label>Job ID<input id="job" placeholder="Hoặc dán jobId đã tạo trên Swagger"></label><button id="watch">Theo dõi nhiệm vụ</button><button id="unwatch">Ngừng theo dõi</button>
+</details>
+<div id="notice" role="status"></div>
+<button id="recover" disabled>Đóng job lỗi đã có bằng chứng dừng</button>
+<div class="row"><section class="main panel"><h2>Bản đồ đang quét</h2><div id="mapStage" style="position:relative;line-height:0"><img id="mapImage" class="map" style="display:block" alt="Chưa nhận dữ liệu bản đồ" hidden><div id="mapOverlay" hidden style="position:absolute;inset:0;pointer-events:none"><svg id="mapSvg" aria-label="Vị trí và hướng robot" style="width:100%;height:100%" preserveAspectRatio="xMidYMid meet"><g id="robotMarker"><circle id="robotDot" fill="#0879ee" fill-opacity=".7" stroke="white" stroke-width="1"/><path id="robotArrow" fill="#ff7900" stroke="white" stroke-width=".6"/></g></svg></div></div><small id="mapTime">Đang chờ dữ liệu mới từ Pi.</small><small id="mapGeometry">Kích thước map lấy từ dữ liệu quét, không cố định 3 × 5 m.</small><small id="robotPose">Chưa có vị trí robot trong phiên quét.</small></section>
+<aside class="side"><section class="panel"><h2>Camera robot</h2><img id="cameraImage" class="camera" alt="Chưa nhận ảnh camera" hidden><img id="cameraStreamImage" class="camera" alt="Video trực tiếp từ robot" hidden><small id="cameraTime">Chưa có ảnh.</small>
+<details><summary>Video trực tiếp cùng mạng</summary><label>URL video từ robot<input id="cameraStreamUrl" type="url" placeholder="http://IP_PI:8080/stream?topic=/ascamera/camera_publisher/rgb0/image&amp;type=mjpeg&amp;width=640&amp;height=480&amp;quality=60"></label><button id="startCameraStream">Xem video trực tiếp</button><button id="stopCameraStream">Dùng ảnh MQTT</button><small>Video trực tiếp cần laptop truy cập được Pi. Muốn dùng ảnh MQTT cần bật tùy chọn thumbnail trên Pi. Video cổng 8080 cần mạng truy cập trực tiếp hoặc đường hầm.</small></details></section>
+<section class="panel"><h2>Di chuyển</h2><small id="manualControlStatus">Đang chờ cấu hình điều khiển từ Pi.</small><p>Bấm một lần để chạy trong thời gian đã chọn. Trang gia hạn lệnh ngắn; có thể Dừng bất kỳ lúc nào.</p>
+<label>Thời gian chạy (giây)<input id="jogSeconds" type="number" min="0.4" max="10" step="0.2" value="4"></label>
+<label>Tốc độ tiến/lùi<select id="jogSpeed"><option value="0.05">0,05 m/s</option><option value="0.08">0,08 m/s</option><option value="0.10" selected>0,10 m/s</option><option value="0.15">0,15 m/s</option><option value="0.20">0,20 m/s</option><option value="0.25">0,25 m/s</option><option value="0.30">0,30 m/s</option></select></label>
+<label>Tốc độ quay<select id="jogTurnSpeed"><option value="0.20">0,20 rad/s</option><option value="0.35">0,35 rad/s</option><option value="0.45" selected>0,45 rad/s</option><option value="0.50">0,50 rad/s</option><option value="0.80">0,80 rad/s</option><option value="1.00">1,00 rad/s</option></select></label><small id="jogStatus">Chưa chạy.</small>
+<button data-x="1" data-z="0" disabled>Tiến</button><button data-x="-1" data-z="0" disabled>Lùi</button><button data-x="0" data-z="1" disabled>Quay trái</button><button data-x="0" data-z="-1" disabled>Quay phải</button><button id="stop" disabled>Dừng di chuyển</button>
+<small>M1 quay tại chỗ. Giới hạn lùi phụ thuộc profile Pi; cần LiDAR phía sau sẵn sàng. Tốc độ thực bị giới hạn theo cấu hình Pi; góc quay phụ thuộc tốc độ và thời gian chạy.</small><small id="motionStatus">Chưa có phản hồi chuyển động.</small><pre id="receipt">Chưa gửi lệnh.</pre>
+<button id="save" disabled>Lưu bản đồ và kết thúc</button><small>Pi phải được cấu hình HTTPS upload để hoàn tất lưu bản đồ vào hệ thống.</small></section></aside></div>
+<section class="panel"><h2>Bản đồ đã lưu của nhiệm vụ</h2>
+<button id="viewSavedMap" disabled>Xem map đã lưu</button><a id="downloadSavedMap" hidden>Tải PNG</a>
+<small>Dùng Job ID đang theo dõi ở trên, kể cả nhiệm vụ đã kết thúc. Bấm “Lưu bản đồ và kết thúc” để lưu; “Dừng di chuyển” và “Ngừng theo dõi” không lưu bản đồ.</small>
+<label>Map ID đã đăng ký<input id="savedMapId" readonly placeholder="Lấy từ bước COMMIT_MAP thành công của nhiệm vụ"></label>
+<small id="savedMapStatus" role="status">Chọn nhiệm vụ rồi bấm Xem map đã lưu. Pi có thể đã tắt.</small>
+<img id="savedMapImage" class="map" alt="Bản đồ đã lưu trên BE" hidden>
+</section>
+<section id="mappingAutonomy" class="panel"></section>
+<section id="mapNavigation" class="panel" aria-label="Đặt endpoint và dẫn đường trên map đã lưu"></section>
+<section class="panel"><h2>Phát giọng nói</h2><small>Giọng thông báo được tổng hợp bằng AI.</small>
+<p>Dùng Robot ID và token ở trên. Kết thúc nhiệm vụ quét trước khi tạo nhiệm vụ phát loa riêng.</p>
+<label>Workflow phát loa<input id="speechWorkflow" placeholder="Bấm Chuẩn bị workflow để lấy ID"></label>
+<button id="prepareSpeech">Chuẩn bị workflow phát loa</button>
+<label>Văn bản (tối đa 500 ký tự)<textarea id="speechText" maxlength="500" rows="3" style="width:100%;padding:10px">Xin chào. Robot đã nhận lệnh từ máy chủ.</textarea></label>
+<label>Ngôn ngữ<select id="speechLanguage"><option value="vi">Tiếng Việt</option><option value="en">English</option></select></label>
+<button id="speak">Gửi văn bản tới robot</button><button id="speechStatus" disabled>Xem kết quả phát loa</button>
+<pre id="speechReceipt">Chưa gửi lệnh.</pre></section>
+<details class="panel"><summary>Trạng thái nhiệm vụ</summary><pre id="state"></pre></details>
+<!-- BEGIN_AUTONOMY_SCRIPT -->
+<script>
+/* Session scoped, short-lived autonomy control. No commands on page load. */
+(function(root){
+  'use strict';
+  class AutonomyRun {
+    constructor(send,onChange,onFinish){
+      this.send=send;this.onChange=onChange;this.onFinish=onFinish;
+      this.active=false;this.generation=0;this.timer=null;this.limit=null;this.run=null;this.context=null;
+    }
+    start(context,seconds,stopOnReturn,saveAfter){
+      if(this.active)throw Error('Dừng chế độ tự chạy hiện tại trước.');
+      if(!Number.isInteger(seconds)||seconds<10||seconds>600)throw Error('Thời gian tự chạy từ 10 đến 600 giây.');
+      this.context={...context};this.saveAfter=saveAfter;this.stopMessage=null;
+      this.run={action:'START',runId:crypto.randomUUID(),maxDurationSec:seconds,stopOnReturn:!!stopOnReturn,saveOnComplete:!!saveAfter};
+      this.active=true;this.confirmed=false;this.startedAt=performance.now();this.commandIds=new Set();const generation=++this.generation;
+      this.limit=setTimeout(()=>this.stop('Hết thời gian trên trình duyệt; đã ngừng gia hạn.').catch(()=>{}),(seconds+3)*1000);
+      this.onChange('Đã gửi yêu cầu tự chạy; đang chờ trạng thái từ Pi.');
+      this.renew(generation,true);
+    }
+    async renew(generation,first=false){
+      if(!this.active||generation!==this.generation)return;
+      const started=performance.now();
+      try{
+        if(!this.confirmed&&performance.now()-this.startedAt>3500)throw Error('Pi chưa xác nhận START; kiểm tra receipt và đồng hồ BE/Pi.');
+        const receipt=await this.send({...this.run,action:this.confirmed?'RENEW':'START'},this.context);
+        if(!this.active||generation!==this.generation)return;
+        if(receipt?.commandId){this.commandIds.add(receipt.commandId);if(this.commandIds.size>16)this.commandIds.delete(this.commandIds.values().next().value);}
+        if(['PI_REJECTED','NO_PI_ACK','PUBLISH_FAILED'].includes(receipt?.status))throw Error(receipt.errorCode||receipt.status);
+        if(receipt?.status==='PI_ACCEPTED')this.confirmed=true;
+        this.timer=setTimeout(()=>this.renew(generation),Math.max(0,300-(performance.now()-started)));
+      }catch(e){if(this.active&&generation===this.generation)await this.stop('Tự chạy đã ngừng gia hạn: '+e.message).catch(()=>{});}
+    }
+    observeReceipt(receipt){
+      if(!this.active||!this.commandIds?.has(receipt?.commandId))return;
+      if(receipt.status==='PI_ACCEPTED')this.confirmed=true;
+      if(['PI_REJECTED','NO_PI_ACK','PUBLISH_FAILED'].includes(receipt.status))
+        this.stop('Pi chưa thực hiện lệnh: '+(receipt.errorCode||receipt.status)).catch(()=>{});
+    }
+    cancel(){this.active=false;++this.generation;clearTimeout(this.timer);clearTimeout(this.limit);}
+    async stop(message='Đã ngừng gia hạn tự chạy và gửi yêu cầu dừng.'){
+      const run=this.run&&{...this.run,action:'STOP'},context=this.context;
+      this.cancel();this.stopMessage=message;this.onChange(message);
+      if(run&&context)return this.send(run,context);
+    }
+    observe(report,context){
+      if(!this.active)return;
+      if(context.job!==this.context.job||context.session!==this.context.session||!context.mapping){
+        this.stop('Phiên quét thay đổi; đã ngừng tự chạy.').catch(()=>{});return;
+      }
+      if(report?.run_id!==this.run.runId)return;
+      if(report.state==='RUNNING')this.confirmed=true;
+      this.onChange('Pi: '+report.state+' / '+report.reason+' • '+report.elapsed_sec+' giây • '+report.travel_m+' m.');
+      if(report.finished){
+        const covered=report.reason==='COVERAGE_COMPLETE'&&report.coverage_complete===true&&report.exploration?.state==='COMPLETE';
+        const finish=this.saveAfter&&(['TIME_LIMIT','RETURNED_TO_START'].includes(report.reason)||covered&&report.save_on_complete!==true),generation=this.generation;
+        this.cancel();
+        if(finish)this.onFinish(this.context,report,generation);
+      }
+    }
+  }
+  function mount(host){
+    const el=document.getElementById('mappingAutonomy');
+    el.innerHTML='<h2>Tự chạy tránh vật cản để quét map</h2>'+
+      '<p>Profile frontier: Pi tìm vùng chưa biết có đường tiếp cận, giảm tốc theo LiDAR và dừng khi không còn frontier đáng kể trong vùng đi tới được, sau thời gian xác nhận. Màu đen là vật cản; màu xám ngoài tường được giữ nguyên. Profile reactive cũ chỉ tránh vật cản theo thời gian.</p>'+
+      '<label>Giới hạn thời gian (giây)<input id="autoSeconds" type="number" min="10" max="600" value="180"></label>'+
+      '<label><input id="autoReturn" type="checkbox"> Dừng nếu đi qua gần điểm đầu sau khi đã rời xa và đi đủ quãng đường</label>'+
+      '<label><input id="autoSave" type="checkbox"> Lưu map và kết thúc khi hoàn tất, hết thời gian hoặc trở lại gần điểm đầu (hết thời gian không có nghĩa đã quét hết)</label>'+
+      '<button id="autoStart" disabled>Bắt đầu tự quét</button> <button id="autoStop" disabled>Dừng tự chạy</button>'+
+      '<small id="autoStatus" role="status">Chờ Pi có bản vá và cấu hình kích thước robot.</small>'+
+      '<pre id="autoReport">Chưa có trạng thái tự chạy.</pre>';
+    const $=id=>document.getElementById(id);
+    let report=null,fresh=false,saving=false;
+    const run=new AutonomyRun(host.send,message=>{$('autoStatus').textContent=message;host.buttons();},async(context,state)=>{
+      if(saving||host.context().job!==context.job||host.context().session!==context.session)return;
+      saving=true;
+      try{await host.save();$('autoStatus').textContent='Pi đã dừng vì '+state.reason+'. Đã yêu cầu lưu; chờ Job SUCCEEDED rồi xem map đã lưu.';}
+      catch(e){$('autoStatus').textContent='Chưa lưu được map: '+e.message;}
+      finally{saving=false;host.buttons();}
+    });
+    $('autoStart').onclick=()=>{
+      const c=host.context();
+      if(!c.mapping||c.busy||c.jogActive||!fresh||!report?.available)return;
+      try{run.start(c,Number($('autoSeconds').value),report?.exploration_mode==='frontier'?false:$('autoReturn').checked,$('autoSave').checked);}
+      catch(e){$('autoStatus').textContent=e.message;}
+    };
+    $('autoStop').onclick=async()=>{try{await run.stop();await host.manualStop();}catch(e){$('autoStatus').textContent='Chưa xác nhận dừng: '+e.message;}};
+    return {
+      observeReceipt(receipt){run.observeReceipt(receipt);},
+      get active(){return run.active;},
+      get owned(){return run.active||fresh&&!!report?.control_selected;},
+      cancel(){run.cancel();},
+      async stop(){return run.stop();},
+      render(state){
+        const c=host.context(),age=(Date.now()-Date.parse(state.motionObservedAt))/1000;
+        report=state.autonomy;
+        fresh=Number.isFinite(age)&&age>=-1&&age<15;
+        $('autoReport').textContent=JSON.stringify({observedAt:state.motionObservedAt,...report},null,2);
+        const max=report?.profile_max_duration_sec;
+        if(Number.isFinite(max)){$('autoSeconds').max=max;if(Number($('autoSeconds').value)>max)$('autoSeconds').value=max;}
+        run.observe(report,c);
+        if(!run.active)$('autoStatus').textContent=run.stopMessage||(report?.available&&fresh?
+          'Pi: '+report.state+' / '+report.reason+(report.control_selected?'. Bấm Dừng tự chạy để trả quyền điều khiển tay.':'. Chờ phiên map sẵn sàng rồi bấm Bắt đầu tự quét.'):
+          'Pi chưa cấu hình tự chạy hoặc heartbeat đã cũ.');
+        if(report?.exploration_mode==='frontier'&&report.state!=='IDLE'&&!saving){
+          const exploration=report.exploration;
+          $('autoStatus').textContent+=' • Frontier: '+(exploration?.frontier_count??'đang tính')+
+            ' • '+(report.coverage_complete?'Đã hoàn tất vùng tiếp cận được.':exploration?.reason||'Chưa xác nhận quét hết.');
+        }
+        this.buttons();
+      },
+      buttons(){
+        const c=host.context(),owned=run.active||fresh&&!!report?.control_selected;
+        $('autoStart').disabled=!c.mapping||c.busy||c.jogActive||owned||saving||!fresh||!report?.available;
+        $('autoStop').disabled=!c.session||c.busy;
+        for(const id of ['autoSeconds','autoReturn','autoSave'])$(id).disabled=owned||saving;
+        if(report?.exploration_mode==='frontier'){$('autoReturn').checked=false;$('autoReturn').disabled=true;}
+      }
+    };
+  }
+  const api={AutonomyRun,mount};
+  if(typeof module!=='undefined'&&module.exports)module.exports=api;
+  else root.MappingAutonomy=api;
+})(typeof globalThis!=='undefined'?globalThis:this);
+</script>
+<!-- END_AUTONOMY_SCRIPT -->
+<script>
+'use strict';
+const $=id=>document.getElementById(id);let job='',session='',mapping=false,timer=null,busy=false,polling=false,cameraStreaming=false,recovery=false,manualSource=null;const images={};
+function notice(message){$('notice').textContent=message}
+let autoMapping=null;
+let watchEpoch=0,mapFrameRevision=null,mapLoaded=false,currentMapState=null;
+let savedMapGeneration=0,savedMapLoading=false;
+function savedMapButton(){$('viewSavedMap').disabled=!job||savedMapLoading}
+function resetSavedMap(){
+  savedMapGeneration++;savedMapLoading=false;
+  clearImage('savedMapImage','savedMapStatus','Chưa tải map đã lưu của nhiệm vụ này.');
+  $('savedMapId').value='';$('downloadSavedMap').hidden=true;$('downloadSavedMap').removeAttribute('href');
+  savedMapButton();
+}
+function committedMap(detail){
+  const steps=(detail.steps??[]).filter(s=>s.status==='SUCCEEDED'&&s.stepTypeSnapshot==='DATA_SERVICE'&&s.resolvedInputsJson?.service_key==='COMMIT_MAP_ARTIFACT');
+  steps.sort((a,b)=>(b.executionSequenceNo??0)-(a.executionSequenceNo??0));
+  const result=steps[0]?.resultJson?.data;
+  if(!result)return null;
+  if(!/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(result.map_id??''))throw Error('Kết quả đăng ký map thiếu map_id hợp lệ.');
+  return result;
+}
+async function viewSavedMap(){
+  if(!job||savedMapLoading)return;
+  const observedJob=job,generation=++savedMapGeneration;
+  savedMapLoading=true;savedMapButton();
+  clearImage('savedMapImage','savedMapStatus','Đang tìm map đã lưu của nhiệm vụ…');
+  $('savedMapId').value='';$('downloadSavedMap').hidden=true;$('downloadSavedMap').removeAttribute('href');
+  try{
+    const detail=await api('/api/v1/jobs/'+encodeURIComponent(observedJob));
+    if(generation!==savedMapGeneration)return;
+    const result=committedMap(detail);
+    if(!result){$('savedMapStatus').textContent='Nhiệm vụ '+(detail.job?.status??'')+' chưa có bước đăng ký map thành công. Nếu đang lưu, đợi hoàn tất rồi bấm lại; dừng/hủy nhiệm vụ không tự lưu map.';return}
+    const path='/api/v1/maps/'+encodeURIComponent(result.map_id);
+    const [meta,response]=await Promise.all([api(path+'/image-metadata'),api(path+'/image.png',undefined,true,{headers:{Accept:'image/png'}})]);
+    if(generation!==savedMapGeneration)return;
+    if(meta.map_id!==result.map_id||![meta.width_px,meta.height_px,meta.resolution_m_per_pixel,meta.width_m,meta.height_m].every(v=>Number.isFinite(v)&&v>0)||![meta.origin_x_m,meta.origin_y_m,meta.origin_yaw_rad].every(Number.isFinite))throw Error('Metadata map đã lưu chưa hợp lệ.');
+    if(response.headers.get('Content-Type')?.split(';')[0]!=='image/png')throw Error('BE chưa trả về ảnh PNG của map.');
+    if(result.asset_hash&&meta.asset_hash!==result.asset_hash||response.headers.get('X-Map-Asset-Hash')!==meta.asset_hash)throw Error('Ảnh và metadata không cùng phiên bản map. Hãy tải lại.');
+    const blob=await response.blob();if(generation!==savedMapGeneration)return;
+    const url=URL.createObjectURL(blob);images.savedMapImage=url;
+    $('savedMapImage').onerror=()=>{if(generation===savedMapGeneration){clearImage('savedMapImage','savedMapStatus','Không đọc được ảnh PNG. Bấm Xem map để thử lại.');$('downloadSavedMap').hidden=true;$('downloadSavedMap').removeAttribute('href')}};
+    $('savedMapImage').src=url;$('savedMapImage').hidden=false;$('savedMapId').value=result.map_id;
+    $('downloadSavedMap').href=url;$('downloadSavedMap').download='map-'+result.map_id+'.png';$('downloadSavedMap').hidden=false;
+    $('savedMapStatus').textContent='Map đã lưu trên BE • Job '+(detail.job?.status??'')+' • '+meta.width_px+' × '+meta.height_px+' px • '+meta.width_m.toFixed(2)+' × '+meta.height_m.toFixed(2)+' m • '+meta.resolution_m_per_pixel.toFixed(3)+' m/ô • gốc ('+meta.origin_x_m.toFixed(3)+', '+meta.origin_y_m.toFixed(3)+') m, góc '+meta.origin_yaw_rad.toFixed(3)+' rad. Đây là ảnh đã lưu, không phải vị trí robot trực tiếp.';
+  }catch(e){if(generation===savedMapGeneration)$('savedMapStatus').textContent='Không tải được map: '+e.message}
+  finally{if(generation===savedMapGeneration){savedMapLoading=false;savedMapButton()}}
+}
+$('viewSavedMap').onclick=viewSavedMap;
+function hideRobot(text='Chờ tọa độ TF mới của robot.'){$('mapOverlay').hidden=true;$('robotPose').textContent=text}
+function mapPoint(p,value){
+  const origin=p?.origin;if(!Array.isArray(origin)||origin.length!==3)return null;
+  const values=[p?.width,p?.height,p?.resolution,...origin,value?.x_m,value?.y_m,value?.yaw_rad];
+  if(!values.every(Number.isFinite)||p.width<=0||p.height<=0||p.resolution<=0)return null;
+  const dx=value.x_m-origin[0],dy=value.y_m-origin[1],c=Math.cos(origin[2]),s=Math.sin(origin[2]);
+  return {x:(c*dx+s*dy)/p.resolution,y:p.height-(-s*dx+c*dy)/p.resolution,angle:-(value.yaw_rad-origin[2])*180/Math.PI};
+}
+function freshMapPose(sample,observed){const age=(Date.now()-Date.parse(observed))/1000;return sample?.fresh===true&&Number.isFinite(sample.age_sec)&&sample.age_sec>=0&&Number.isFinite(age)&&age>= -1&&Math.max(age,0)+sample.age_sec<=2.5}
+function scopedPose(state){
+  const heartbeat=state.motionTelemetry?.map_pose;
+  if(heartbeat?.value?.mapping_session_id===state.mapping_session_id&&freshMapPose(heartbeat,state.motionObservedAt)){
+    return {sample:heartbeat,observed:state.motionObservedAt};
+  }
+  return {sample:state.preview?.pose,observed:state.preview?.captured_at};
+}
+function renderMapView(state){
+  currentMapState=state;
+  const p=state?.preview;
+  if(!p){hideRobot('Chưa có map mới cho phiên quét.');return}
+  const dims=[p.width,p.height,p.resolution];
+  if(!dims.every(Number.isFinite)||dims.some(x=>x<=0)){hideRobot('Metadata bản đồ chưa hợp lệ.');return}
+  $('mapGeometry').textContent=(p.width*p.resolution).toFixed(2)+' × '+(p.height*p.resolution).toFixed(2)+' m • '+p.width+' × '+p.height+' ô • '+(p.resolution*100).toFixed(1)+' cm/ô';
+  if(state.state!=='MAPPING'||!state.potentially_open){hideRobot('Phiên đã dừng hoặc đang lưu; không hiển thị vị trí trực tiếp.');return}
+  const {sample,observed}=scopedPose(state),age=(Date.now()-Date.parse(observed))/1000;
+  if(!freshMapPose(sample,observed)){hideRobot();return}
+  const point=mapPoint(p,sample.value);
+  if(!point){hideRobot('Tọa độ robot chưa hợp lệ.');return}
+  $('robotPose').textContent='Robot: x='+sample.value.x_m.toFixed(2)+' m, y='+sample.value.y_m.toFixed(2)+' m, hướng '+(sample.value.yaw_rad*180/Math.PI).toFixed(0)+'°';
+  if(p.mapping_session_id!==state.mapping_session_id||!mapLoaded||$('mapImage').hidden||mapFrameRevision!==p.revision){$('mapOverlay').hidden=true;return}
+  if(point.x<0||point.y<0||point.x>p.width||point.y>p.height){hideRobot('Robot nằm ngoài ảnh map hiện tại; chờ map mở rộng.');return}
+  const r=Math.max(2,Math.min(8,.125/p.resolution));
+  $('mapSvg').setAttribute('viewBox','0 0 '+p.width+' '+p.height);
+  $('robotMarker').setAttribute('transform','translate('+point.x+' '+point.y+') rotate('+point.angle+')');
+  $('robotDot').setAttribute('r',r);$('robotArrow').setAttribute('d','M '+(r*1.8)+' 0 L '+(r*.3)+' '+(-r*.55)+' L '+(r*.3)+' '+(r*.55)+' Z');
+  $('mapOverlay').hidden=false;
+}
+
+class TimedJog {
+  constructor(send,onState){this.send=send;this.onState=onState;this.active=false;this.generation=0;this.renewTimer=null;this.stopTimer=null;this.commandId=null}
+  start(x,z,totalMs){
+    if(this.active)throw Error('Dừng chuyển động hiện tại trước khi gửi hướng mới.');
+    if(!Number.isFinite(totalMs)||totalMs<400||totalMs>10000)throw Error('Thời gian chạy phải từ 0,4 đến 10 giây.');
+    this.active=true;this.commandId=null;const generation=++this.generation;
+    this.onState('Đang gia hạn lệnh; thời gian chọn '+(totalMs/1000)+' giây.');
+    this.stopTimer=setTimeout(()=>this.stop('Đã hết thời gian chạy.').catch(()=>{}),totalMs);
+    this.renew(x,z,generation);
+  }
+  async renew(x,z,generation){
+    if(!this.active||generation!==this.generation)return;
+    const started=performance.now();
+    try{
+      const receipt=await this.send(x,z);
+      if(!this.active||generation!==this.generation)return;
+      this.commandId=receipt?.commandId;
+      this.onState('Đang gia hạn lệnh. Bấm Dừng để kết thúc sớm.',receipt);
+      this.renewTimer=setTimeout(()=>this.renew(x,z,generation),Math.max(0,300-(performance.now()-started)));
+    }catch(error){if(this.active&&generation===this.generation)await this.stop('Đã ngừng gia hạn: '+error.message).catch(()=>{})}
+  }
+  async stop(message='Đã ngừng gia hạn và gửi lệnh dừng.'){
+    this.active=false;const generation=++this.generation;
+    clearTimeout(this.renewTimer);clearTimeout(this.stopTimer);
+    this.onState(message);
+    try{const receipt=await this.send(0,0);if(generation===this.generation)this.onState(message,receipt);return receipt}
+    catch(error){if(generation===this.generation)this.onState('Đã ngừng gia hạn; chưa xác nhận được lệnh dừng: '+error.message);throw error}
+  }
+}
+const controlSessionId=crypto.randomUUID();let controlSequence=0;
+const jog=new TimedJog(control,(message,receipt)=>{$('jogStatus').textContent=message;if(receipt)$('receipt').textContent=JSON.stringify(receipt,null,2);buttons()});
+
+async function api(path,body,raw=false,options={}){const token=$('token').value.trim().replace(/^Bearer\s+/i,'');if(!token)throw Error('Cần access token ADMIN.');const r=await fetch(path,{method:body===undefined?'GET':'POST',headers:{Authorization:'Bearer '+token,...(body===undefined?{}:{'Content-Type':'application/json'}),...(options.headers??{})},body:body===undefined?undefined:JSON.stringify(body),cache:'no-store',signal:AbortSignal.timeout(options.timeoutMs??5000),keepalive:options.keepalive??false});if(!r.ok){const t=await r.text();const error=Error(r.status+' '+t.slice(0,300));error.status=r.status;throw error}return raw?r:r.status===204?null:r.json()}
+function buttons(){savedMapButton();document.querySelectorAll('[data-x]').forEach(b=>b.disabled=!mapping||busy||jog.active||!!autoMapping?.owned||manualSource==='gamepad');$('save').disabled=!mapping||busy||jog.active;$('stop').disabled=!session;$('create').disabled=busy||mapping||recovery||jog.active;$('recover').disabled=busy||!recovery;$('speak').disabled=busy||mapping||jog.active;autoMapping?.buttons()}
+function clearImage(id,label,text){if(id==='cameraImage'&&cameraStreaming)return;$(id).hidden=true;$(label).textContent=text;if(id==='mapImage'){mapFrameRevision=null;mapLoaded=false;currentMapState=null;hideRobot('Chưa có vị trí robot trong phiên quét.')}if(images[id]){URL.revokeObjectURL(images[id]);delete images[id]}$(id).removeAttribute('src')}
+async function picture(route,id,label,epoch=watchEpoch,observedJob=job){
+  if(id==='cameraImage'&&cameraStreaming)return;
+  const r=await api('/api/v1/jobs/'+encodeURIComponent(observedJob)+'/'+route,undefined,true);
+  if(epoch!==watchEpoch||id==='cameraImage'&&cameraStreaming)return;
+  if(r.status===204){clearImage(id,label,'Chưa có ảnh mới hoặc dữ liệu đã quá 10 giây.');return}
+  const revision=Number(r.headers.get('X-Frame-Revision'));
+  if(id==='mapImage'&&mapFrameRevision===revision&&mapLoaded)return;
+  const blob=await r.blob();if(epoch!==watchEpoch||id==='cameraImage'&&cameraStreaming)return;
+  const url=URL.createObjectURL(blob);if(images[id])URL.revokeObjectURL(images[id]);images[id]=url;
+  if(id==='mapImage'){mapFrameRevision=revision;mapLoaded=false;$('mapOverlay').hidden=true;$(id).onload=()=>{if(epoch===watchEpoch&&mapFrameRevision===revision){mapLoaded=true;renderMapView(currentMapState)}}}
+  $(id).src=url;$(id).hidden=false;$(label).textContent='Bản '+revision+' • '+r.headers.get('X-Captured-At');
+}
+function stopCameraStream(){cameraStreaming=false;$('cameraStreamImage').hidden=true;$('cameraStreamImage').removeAttribute('src');$('cameraTime').textContent='Đã chuyển về ảnh MQTT.'}
+try{$('cameraStreamUrl').value=localStorage.getItem('mar.camera.url')||''}catch(e){}
+$('startCameraStream').onclick=()=>{try{const url=new URL($('cameraStreamUrl').value.trim());if(!['http:','https:'].includes(url.protocol)||url.username||url.password)throw Error('Cần URL video HTTP/HTTPS, không kèm mật khẩu.');if(location.protocol==='https:'&&url.protocol!=='https:')throw Error('Trang HTTPS cần URL video HTTPS; hoặc dùng trang HTTP khi thử cùng mạng.');clearImage('cameraImage','cameraTime','Đang kết nối video trực tiếp…');cameraStreaming=true;try{localStorage.setItem('mar.camera.url',url.href)}catch(e){}$('cameraStreamImage').src=url.href;$('cameraStreamImage').hidden=false}catch(e){notice(e.message)}};
+$('stopCameraStream').onclick=stopCameraStream;
+$('cameraStreamImage').onload=()=>{if(cameraStreaming)$('cameraTime').textContent='Video trực tiếp từ topic camera của Pi.'};
+$('cameraStreamImage').onerror=()=>{if(cameraStreaming){stopCameraStream();$('cameraTime').textContent='Không kết nối được video. Kiểm tra URL/Pi; đang dùng lại ảnh MQTT.'}};
+window.addEventListener('pagehide',stopCameraStream);
+function renderMotion(state){const manual=state.autonomy?.manual_control;manualSource=manual?.source??null;$('manualControlStatus').textContent=manual?('Nguồn: '+manual.source+' • '+manual.layout+' • '+manual.forward_mps+' m/s • '+manual.angular_rps+' rad/s'+(manual.continuous?' • giữ cần chạy liên tục':'')+(manual.session_required?' • cần phiên quét':' • joystick chạy cả khi chưa tạo job')):'Chưa nhận cấu hình điều khiển từ Pi.';const age=state.motionObservedAt?(Date.now()-Date.parse(state.motionObservedAt))/1000:Infinity;const sample=state.motionTelemetry?.gate;let gate;try{gate=JSON.parse(sample?.value??'null')}catch{}if(!gate||age>10){$('motionStatus').textContent='Chưa có phản hồi chuyển động mới từ Pi.';return}const labels={CLEAR:'Đường điều khiển đang cho phép chuyển động',NO_LEASE:'Đang dừng/chờ lệnh',STALE_COMMAND:'Chưa nhận được lệnh mới',STALE_OR_INVALID_US100:'Dừng: dữ liệu siêu âm chưa hợp lệ hoặc đã cũ',SIDE_OBSTACLE:'Dừng: có vật cản bên cạnh',REAR_OBSTACLE:'Dừng: có vật cản phía sau',REAR_LIDAR_NOT_READY:'Dừng: LiDAR phía sau chưa đủ dữ liệu',REAR_LIDAR_TF_NOT_READY:'Dừng: chưa xác định được hướng LiDAR phía sau',STALE_REAR_LIDAR:'Dừng: dữ liệu LiDAR phía sau đã cũ',REVERSE_NOT_ENABLED:'Chưa bật cấu hình lùi M1',NOT_COMMISSIONED:'Cấu hình chuyển động chưa được bật'};$('motionStatus').textContent=(labels[gate.reason]??('Robot dừng/giới hạn: '+gate.reason))+' • cập nhật '+Math.max(0,Math.round(age))+' giây trước'}
+async function poll(){if(!job||polling)return;polling=true;const epoch=watchEpoch,observedJob=job;try{const state=await api('/api/v1/jobs/'+encodeURIComponent(observedJob)+'/mapping-session?includePreview=false');if(epoch!==watchEpoch)return;session=state.mapping_session_id;renderMotion(state);recovery=state.job_status==='RECOVERY_REQUIRED';mapping=state.state==='MAPPING'&&state.potentially_open&&state.job_status==='RUNNING';autoMapping?.render(state);if(!mapping&&jog.active)await jog.stop('Nhiệm vụ không còn cho phép di chuyển.').catch(()=>{});notice(state.job_status==='RECOVERY_REQUIRED'?'Nhiệm vụ cần khôi phục. Đã khóa nút di chuyển; không tạo thêm nhiệm vụ.':mapping?'Đang quét bản đồ.':'Trạng thái nhiệm vụ: '+state.job_status+' / '+state.state);const p=state.preview;const summary={...state,preview:p?{revision:p.revision,width:p.width,height:p.height,resolution:p.resolution,captured_at:p.captured_at,pose:p.pose}:null};$('state').textContent=JSON.stringify(summary,null,2);buttons();await Promise.all([picture('mapping-preview.png','mapImage','mapTime',epoch,observedJob),picture('camera-preview.jpg','cameraImage','cameraTime',epoch,observedJob)]);if(epoch!==watchEpoch)return;renderMapView(state);if(state.job_status==='FAILED'){const detail=await api('/api/v1/jobs/'+encodeURIComponent(job));const failed=detail.steps?.find(s=>s.status==='FAILED');if(failed)notice('Nhiệm vụ thất bại tại '+failed.stepCodeSnapshot+': '+(failed.errorCode||'Xem chi tiết nhiệm vụ')+(failed.errorCode==='MAP_UPLOAD_UNAUTHORIZED'?' — upload bị từ chối xác thực; map vẫn giữ trên Pi.':''))}const receipt=await api('/api/v1/jobs/'+encodeURIComponent(job)+'/mapping-control');if(receipt){autoMapping?.observeReceipt(receipt);$('receipt').textContent=JSON.stringify(receipt,null,2);if(jog.active&&receipt.commandId===jog.commandId&&['PI_REJECTED','NO_PI_ACK','PUBLISH_FAILED'].includes(receipt.status))await jog.stop('Pi chưa thực hiện lệnh: '+(receipt.errorCode||receipt.status)).catch(()=>{})}}catch(e){if(epoch!==watchEpoch)return;mapping=false;hideRobot();if(autoMapping?.active)await autoMapping.stop().catch(()=>{});if(jog.active)await jog.stop('Mất kết nối theo dõi nhiệm vụ.').catch(()=>{});buttons();if(e.status===404){try{const detail=await api('/api/v1/jobs/'+encodeURIComponent(job));$('state').textContent=JSON.stringify(detail,null,2);if(['QUEUED','ACCEPTED','RUNNING'].includes(detail.job.status)){notice('Đang chờ Pi mở phiên quét.');return}}catch(lookup){notice(lookup.message)}}notice(e.message);clearImage('mapImage','mapTime','Mất kết nối hoặc chưa có phiên quét.');clearImage('cameraImage','cameraTime','Không có ảnh mới.')}finally{polling=false}}
+async function watch(){if(autoMapping?.active)await autoMapping.stop().catch(()=>{});if(jog.active)await jog.stop().catch(()=>{});if(timer)clearInterval(timer);job=$('job').value.trim();if(!job){notice('Cần jobId.');return}watchEpoch++;resetSavedMap();session='';mapping=false;recovery=false;clearImage('mapImage','mapTime','Đang chờ map của phiên mới.');$('mapGeometry').textContent='Đang chờ kích thước map mới.';clearImage('cameraImage','cameraTime','Đang chờ ảnh của phiên mới.');buttons();poll();timer=setInterval(poll,1000)}
+async function control(x,z){if(!session)throw Error('Chưa có phiên quét.');return api('/api/v1/jobs/'+encodeURIComponent(job)+'/mapping-control',{mappingSessionId:session,linearX:x,angularZ:z,durationMs:900,controlSessionId,controlSequence:++controlSequence,requestedAt:new Date().toISOString()},false,{timeoutMs:1200,keepalive:x===0&&z===0})}
+function jogVelocity(directionX,directionZ,speed,turn){if(!Number.isFinite(speed)||speed<0||speed>.30||!Number.isFinite(turn)||turn<0||turn>1.0)throw Error('Tốc độ không hợp lệ.');return [Math.sign(directionX)*speed,Math.sign(directionZ)*turn]}
+document.querySelectorAll('[data-x]').forEach(b=>b.onclick=()=>{if(busy||!mapping||jog.active||autoMapping?.owned)return;try{const [x,z]=jogVelocity(Number(b.dataset.x),Number(b.dataset.z),Number($('jogSpeed').value),Number($('jogTurnSpeed').value));jog.start(x,z,Number($('jogSeconds').value)*1000)}catch(e){notice(e.message)}});
+$('stop').onclick=async()=>{try{autoMapping?.cancel();await jog.stop();notice('Đã gửi yêu cầu dừng.')}catch(e){notice(e.message)}};
+async function requestSaveMap(){busy=true;buttons();try{autoMapping?.cancel();await jog.stop();await api('/api/v1/jobs/'+encodeURIComponent(job)+'/events',{eventId:crypto.randomUUID(),eventType:'MAPPING_SAVE_REQUESTED',correlationKey:session,occurredAt:new Date().toISOString(),data:{}});mapping=false;notice('Đã yêu cầu lưu. Theo dõi các bước lưu và dừng. Đợi Job SUCCEEDED, rồi bấm Xem map đã lưu ở bên dưới. Nếu lưu thất bại, xem lỗi của nhiệm vụ.')}finally{busy=false;buttons()}}
+$('save').onclick=()=>requestSaveMap().catch(e=>notice(e.message));
+$('create').onclick=async()=>{if(busy)return;busy=true;buttons();try{const result=await api('/api/v1/mapping-jobs',{workflowId:$('workflow').value.trim(),robotId:$('robot').value.trim(),floorId:$('floor').value.trim(),mapName:$('mapName').value.trim()});$('job').value=result.jobId;notice('Đã tạo '+result.jobCode);watch()}catch(e){notice(e.message)}finally{busy=false;buttons()}};
+$('recover').onclick=async()=>{busy=true;buttons();try{
+  if(jog.active)await jog.stop();
+  const pending=await api('/api/v1/jobs/'+encodeURIComponent(job)+'/mapping-recovery');
+  if(pending.selectedUnsentStop){
+    if(!pending.canReconcile)throw Error('Chưa thể đóng STOP chưa gửi: '+pending.blockers.join(', ')+'. Giữ robot đứng yên; Pi cần HELLO/heartbeat mới và phiên map đã đóng.');
+    const result=await api('/api/v1/jobs/'+encodeURIComponent(job)+'/mapping-recovery',{
+      jobStepId:pending.jobStepId,transportSessionId:pending.transportSessionId,confirmedStopped:true,
+      outcome:'CONFIRM_CANCELLED',note:'Đóng cleanup STOP chưa từng gửi sau khi BE kiểm tra biên nhận dừng, journal terminal và heartbeat Pi đứng yên với đúng phiên map đã đóng'
+    },false,{headers:{'Idempotency-Key':crypto.randomUUID()}});
+    recovery=false;mapping=false;$('receipt').textContent=JSON.stringify(result,null,2);notice('Đã đóng job: '+result.status+'. Đợi Pi gửi HELLO mới và robot IDLE trước khi tạo job.');
+    return;
+  }
+  const evidence=await api('/api/v1/jobs/'+encodeURIComponent(job)+'/operations/recovery');
+  const command=evidence.commands.find(c=>c.jobStepId===evidence.jobStepId&&c.commandType==='EXECUTE_STEP');
+  if(!evidence.recoveryRequired||!command||(command.physicalStopConfirmed!==true&&command.operatorReconciled!==true))throw Error('BE chưa có xác nhận dừng hoặc biên nhận kiểm tra tại Pi cho operation này. Không thể tự đóng chỉ bằng heartbeat.');
+  const result=await api('/api/v1/jobs/'+encodeURIComponent(job)+'/operations/'+encodeURIComponent(evidence.jobStepId)+'/reconcile',{
+    commandId:command.commandId,operationKey:evidence.operationKey,transportSessionId:evidence.transportSessionId,
+    evidence:command.physicalStopConfirmed===true?'PI_STOP_CONFIRMED':'STAFF_INSPECTED_STOP',confirmedStopped:true,outcome:'CONFIRM_CANCELLED',note:'Dong job mapping gian doan sau khi Pi da gui bang chung dung hoac bien nhan kiem tra tai robot va journal terminal'
+  },false,{headers:{'Idempotency-Key':crypto.randomUUID()}});
+  recovery=false;mapping=false;$('receipt').textContent=JSON.stringify(result,null,2);notice('Đã đóng job lỗi. Đợi Pi kết nối HELLO mới và dispatchReady=true trước khi tạo nhiệm vụ.');
+}catch(e){notice(e.message);$('receipt').textContent=e.message}finally{busy=false;buttons()}};
+$('watch').onclick=watch;$('unwatch').onclick=()=>{if(autoMapping?.active)autoMapping.stop().catch(()=>{});watchEpoch++;if(jog.active)jog.stop('Đã ngừng theo dõi và ngừng gia hạn.').catch(()=>{});clearInterval(timer);timer=null;mapping=false;buttons();notice('Đã ngừng theo dõi. Nhiệm vụ trên BE vẫn còn; lệnh di chuyển tự hết hạn.');clearImage('mapImage','mapTime','Đã ngừng theo dõi.');clearImage('cameraImage','cameraTime','Đã ngừng theo dõi.')};
+document.addEventListener('visibilitychange',()=>{if(document.hidden){if(autoMapping?.active)autoMapping.stop().catch(()=>{});mapping=false;if(jog.active)jog.stop('Trang đã ẩn; đã ngừng gia hạn.').catch(()=>{});buttons()}});
+window.addEventListener('blur',()=>{if(jog.active)jog.stop('Cửa sổ mất focus; đã ngừng gia hạn.').catch(()=>{})});
+window.addEventListener('pagehide',()=>{if(autoMapping?.active)autoMapping.stop().catch(()=>{});if(jog.active)jog.stop().catch(()=>{})});
+
+let speechJob='';
+async function prepareWorkflow(file,code,field){
+  const published=await api('/api/v1/admin/workflows/published/all');
+  const found=published.find(x=>x.workflow.workflowCode===code && x.workflow.acceptsNewJobs);
+  if(found){$(field).value=found.workflow.workflowId;return}
+  const list=await api('/api/v1/admin/workflows?size=100');
+  const draft=list.content.find(x=>x.workflowCode===code && ['DRAFT','VALIDATED'].includes(x.status));
+  let id=draft?.workflowId;
+  if(!id){const definition=await api('/'+file);const created=await api('/api/v1/admin/workflows/graph',definition);id=created.workflow.workflowId}
+  $(field).value=id;
+  await api('/api/v1/admin/workflows/'+id+'/validate',{});
+  await api('/api/v1/admin/workflows/'+id+'/publish',{});
+}
+$('prepareSpeech').onclick=async()=>{const b=$('prepareSpeech');b.disabled=true;try{await prepareWorkflow('speech-workflow.json','WF_ROBOT_SPEECH_DEMO','speechWorkflow');notice('Workflow phát loa đã sẵn sàng.')}catch(e){notice(e.message)}finally{b.disabled=false}};
+$('prepareMapping').onclick=async()=>{const b=$('prepareMapping');b.disabled=true;try{await prepareWorkflow('mapping-workflow.json','WF_MAPPING','workflow');notice('Workflow quét và lưu đã sẵn sàng.')}catch(e){notice(e.message)}finally{b.disabled=false}};
+$('speak').onclick=async()=>{const b=$('speak');b.disabled=true;try{
+  if(mapping||jog.active)throw Error('Kết thúc nhiệm vụ quét trước khi tạo nhiệm vụ phát loa riêng.');
+  const phrase={text:$('speechText').value,languageCode:$('speechLanguage').value,speedWpm:150};
+  const deadline=Date.now()+150000;let prepared=false;
+  while(Date.now()<deadline){const result=await api('/api/v1/pi/speech/prepare',phrase);if(result.state==='READY'){prepared=true;break}if(result.state!=='PENDING')throw Error('TTS chưa sẵn sàng: '+result.code);$('speechReceipt').textContent='Đang chuẩn bị giọng đọc…';await new Promise(resolve=>setTimeout(resolve,2000))}
+  if(!prepared)throw Error('Hết thời gian chuẩn bị giọng đọc; chưa gửi lệnh tới robot.');
+  const result=await api('/api/v1/speech-jobs',{workflowId:$('speechWorkflow').value.trim(),robotId:$('robot').value.trim(),text:$('speechText').value,languageCode:$('speechLanguage').value});
+  speechJob=result.jobId;$('speechStatus').disabled=false;$('speechReceipt').textContent=JSON.stringify(result,null,2);
+  notice('BE đã tạo nhiệm vụ phát loa. Bấm Xem kết quả để kiểm tra phản hồi Pi.');
+}catch(e){notice(e.message)}finally{b.disabled=false}};
+$('speechStatus').onclick=async()=>{try{$('speechReceipt').textContent=JSON.stringify(await api('/api/v1/jobs/'+encodeURIComponent(speechJob)),null,2)}catch(e){notice(e.message)}};
+</script>
+<!-- BEGIN_NAVIGATION_SCRIPT -->
+<script>
+(function (root, factory) {
+  const navigation = factory();
+  if (typeof module === 'object' && module.exports) module.exports = navigation;
+  else root.SavedMapNavigation = navigation;
+})(globalThis, function () {
+  'use strict';
+  const DEFAULT_MAP = '73f7af66-ae21-499f-8209-57801411e9be';
+  const UUID = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
+  const TERMINAL = new Set(['SUCCEEDED', 'FAILED', 'CANCELLED']);
+  const angle = value => Math.atan2(Math.sin(value), Math.cos(value));
+  const stable = value => JSON.stringify(value, function (key, item) {
+    return item && typeof item === 'object' && !Array.isArray(item)
+      ? Object.keys(item).sort().reduce((out, name) => (out[name] = item[name], out), {}) : item;
+  });
+  function geometry(meta) {
+    if (!meta || !UUID.test(meta.map_id || '') || !/^[a-f0-9]{64}$/i.test(meta.asset_hash || '') ||
+        ![meta.width_px, meta.height_px].every(v => Number.isInteger(v) && v > 0) ||
+        ![meta.resolution_m_per_pixel, meta.origin_x_m, meta.origin_y_m, meta.origin_yaw_rad].every(Number.isFinite) ||
+        meta.resolution_m_per_pixel <= 0 || meta.width_px * meta.height_px > 4000000 || !meta.frame_id) {
+      throw Error('Metadata map thiếu hoặc không hợp lệ.');
+    }
+    return meta;
+  }
+  // u/v are continuous PNG coordinates measured from the top-left image edge.
+  // A click snaps to a cell centre (column + .5, row + .5), including rotated origins.
+  function pixelToMap(meta, u, v) {
+    const r = meta.resolution_m_per_pixel, c = Math.cos(meta.origin_yaw_rad), s = Math.sin(meta.origin_yaw_rad);
+    const x = u * r, y = (meta.height_px - v) * r;
+    return {xM: meta.origin_x_m + c * x - s * y, yM: meta.origin_y_m + s * x + c * y};
+  }
+  function mapToPixel(meta, xM, yM) {
+    const c = Math.cos(meta.origin_yaw_rad), s = Math.sin(meta.origin_yaw_rad);
+    const x = xM - meta.origin_x_m, y = yM - meta.origin_y_m, r = meta.resolution_m_per_pixel;
+    return {u: (c * x + s * y) / r, v: meta.height_px - (-s * x + c * y) / r};
+  }
+  function inside(meta, x, y) {
+    if (![x, y].every(Number.isFinite)) return false;
+    const p = mapToPixel(meta, x, y);
+    return p.u >= 0 && p.v >= 0 && p.u < meta.width_px && p.v < meta.height_px;
+  }
+  function freshPose(snapshot, meta, receivedAgeMs) {
+    const pose = snapshot?.latestPose, robot = snapshot?.robot;
+    const age = Date.parse(snapshot?.observedAt) - Date.parse(pose?.capturedAt);
+    const session=snapshot?.navigationSession;
+    if(session && session.state!=='NONE' && (session.state!=='READY'||session.mapId!==meta.map_id||session.mapAssetHash!==meta.asset_hash))return null;
+    if (!snapshot?.mqttConnected || !snapshot.heartbeatFresh || pose?.fresh !== true ||
+        pose.robotId !== robot?.robotId || robot.currentMapId !== meta.map_id ||
+        robot.mapAssetHash?.toLowerCase() !== meta.asset_hash.toLowerCase() ||
+        pose.mapId !== meta.map_id || pose.frameId !== meta.frame_id ||
+        !Number.isFinite(age) || age < -1000 || age > 3000 || receivedAgeMs < 0 || receivedAgeMs > 3000 ||
+        Math.max(0, age) + receivedAgeMs > 3000 ||
+        ![pose.xM, pose.yM, pose.yawRad].every(Number.isFinite) || !inside(meta, pose.xM, pose.yM)) return null;
+    return pose;
+  }
+  function workflowContract(detail) {
+    const w = detail?.workflow;
+    if (!w || !Array.isArray(detail.steps) || !Array.isArray(detail.transitions)) return null;
+    const steps = detail.steps, code = id => steps.find(s => s.stepId === id)?.stepCode;
+    return {
+      serviceType: w.serviceType, schemaVersion: w.schemaVersion, graphVersion: w.graphVersion,
+      maxTotalVisits: w.maxTotalVisits, inputSchemaJson: w.inputSchemaJson,
+      defaultInputsJson: w.defaultInputsJson, requiredCapabilitiesJson: w.requiredCapabilitiesJson,
+      startStepCode: code(w.startStepId),
+      steps: steps.map(s => ({stepType: s.stepTypeCode, stepCode: s.stepCode, paramsJson: s.paramsJson,
+        inputMappingJson: s.inputMappingJson, timeoutSec: s.timeoutSec, maxAttempts: s.maxAttempts,
+        retryDelaySec: s.retryDelaySec, retryCodesJson: s.retryCodesJson, maxVisits: s.maxVisits})),
+      transitions: detail.transitions.map(t => ({fromStepCode: code(t.fromStepId),
+        toStepCode: t.toStepId == null ? null : code(t.toStepId), outcome: t.outcome,
+        conditionJson: t.conditionJson ?? null, priority: t.priority,
+        defaultTransition: t.defaultTransition, terminalStatus: t.terminalStatus ?? null}))
+        .sort((a, b) => a.outcome.localeCompare(b.outcome))
+    };
+  }
+  function templateContract(template) {
+    const steps = template.graph.steps.map(s => ({...s, stepId: s.stepCode, stepTypeCode: s.stepType}));
+    return workflowContract({workflow: {...template.workflow, startStepId: template.graph.startStepCode}, steps,
+      transitions: template.graph.transitions.map(t => ({...t, fromStepId: t.fromStepCode, toStepId: t.toStepCode ?? null}))});
+  }
+
+  function mount(options) {
+    const host = options.element;
+    host.innerHTML = `
+      <h2>Endpoint và dẫn đường trên map đã lưu</h2>
+      <p>Chọn vị trí và hướng trên map. BE thực thi workflow có step <code>MOVE</code> qua MQTT; Pi dùng Nav2 để đi tới đích.</p>
+      <div class="nav-inline"><label>Map ID<input id="navMapId" value="${DEFAULT_MAP}"></label>
+      <button id="navLoad">Tải map và endpoint</button><button id="navUseSaved">Dùng map vừa lưu ở trên</button></div>
+      <small id="navMapInfo">Dùng token ADMIN ở đầu trang. Xem và đặt điểm không tự chạy robot.</small>
+      <button id="navActivate" disabled>Kích hoạt map trên BE</button>
+      <button id="navNormalize" disabled>Tạo bản map sửa ô xám cho Nav2</button>
+      <button id="navAssign" disabled>Mở phiên dùng map tạm cho robot</button>
+      <button id="navCloseSession" disabled>Đóng phiên map tạm</button>
+      <small>Map và endpoint nằm trong thư viện; robot dùng map này trong phiên 2 giờ, ràng buộc với một lần chạy Pi. Đổi nơi test: đóng phiên rồi chọn map khác.</small>
+      <pre id="navPiCommand">Mở phiên để lấy lệnh khởi động Pi.</pre>
+      <p id="navSessionStatus" role="status">Chưa có phiên định vị.</p>
+      <h3>Khởi tạo vị trí robot</h3>
+      <label><input type="checkbox" id="navSeedMode"> Bấm/kéo trên map để đặt vị trí và hướng KHỞI TẠO, thay vì endpoint</label>
+      <div class="fields"><label>X dự kiến (m)<input id="navSeedX" type="number" step="any"></label><label>Y dự kiến (m)<input id="navSeedY" type="number" step="any"></label>
+      <label>Hướng dự kiến (độ)<input id="navSeedYaw" type="number" min="-180" max="180" step="1" value="0"></label></div>
+      <button id="navSendSeed" disabled>Gửi vị trí khởi tạo cho AMCL</button><button id="navGlobal" disabled>Yêu cầu tự tìm vị trí toàn cục</button>
+      <small>Mũi tên khởi tạo là ước lượng do người dùng đặt. Chỉ mũi tên xanh khi Pi xác minh READY mới là vị trí robot. Phòng đối xứng hoặc ít đặc trưng có thể cần đặt vị trí khởi tạo.</small>
+      <div class="nav-layout"><div>
+        <div class="nav-map-wrap"><canvas id="navCanvas" width="640" height="360" hidden aria-label="Bản đồ chọn vị trí và hướng endpoint"></canvas></div>
+        <div class="nav-legend"><span style="--marker:#0879ee">Robot còn dữ liệu mới</span><span style="--marker:#157347">Endpoint đã lưu</span><span style="--marker:#dc7400">Điểm đang đặt</span></div>
+        <div id="navPose" class="nav-status" role="status">Chưa có vị trí robot trên map này.</div>
+        <small id="navRobotStatus">Chưa theo dõi robot.</small>
+      </div><div>
+        <label>Endpoint đã lưu<select id="navEndpoints"><option value="">Chọn endpoint</option></select></label>
+        <button id="navNewPoint">Đặt endpoint mới</button>
+        <small>Đặt điểm mới: bấm trên vùng sàn đã quét, kéo rồi thả để chọn hướng. Chọn endpoint trong danh sách để sửa hoặc chạy.</small>
+        <label>Mã endpoint<input id="navPointCode" maxlength="64" placeholder="DEMO_POINT_A"></label>
+        <label>Tên endpoint<input id="navPointName" maxlength="160" placeholder="Điểm trước cửa phòng"></label>
+        <div class="fields"><label>X (m)<input id="navX" type="number" step="any"></label><label>Y (m)<input id="navY" type="number" step="any"></label></div>
+        <label>Hướng thân robot trên map (độ)<input id="navYaw" type="number" step="1" min="-180" max="180" value="0"></label>
+        <small>0° theo +X map; 90° theo +Y. Mũi tên thể hiện hướng thân robot; cần hiệu chuẩn góc lắp camera.</small>
+        <button id="navSavePoint" disabled>Lưu endpoint</button>
+        <small id="navPointId">Chưa chọn điểm. Endpoint mới dùng loại WAYPOINT, active và accessible.</small>
+      </div></div>
+      <h3>Chạy workflow MOVE</h3>
+      <label>Workflow NAVIGATION một step MOVE<input id="navWorkflowId" readonly></label>
+      <button id="navPrepare">Chuẩn bị workflow MOVE</button>
+      <small>Tốc độ tối đa của workflow mẫu là 0,05 m/s. Không tạo StepType mới; dùng MOVE đã có.</small>
+      <button id="navRefresh">Kiểm tra vị trí và trạng thái</button>
+      <button id="navMove" disabled>Đi tới endpoint bằng robot của phiên</button>
+      <button id="navCancel" disabled>Hủy yêu cầu dẫn đường</button>
+      <small>MOVE được gắn đúng robot, map và phiên định vị. Vị trí hoặc hướng endpoint thay đổi cần lưu trước; vị trí robot luôn lấy từ Pi.</small>
+      <p id="navAction" class="nav-status" role="status">Tải map để bắt đầu.</p>
+      <details><summary>Request, job và kết quả step MOVE</summary><pre id="navReceipt">Chưa tạo yêu cầu.</pre></details>
+      <details><summary>JSON endpoint để dùng Swagger</summary><pre id="navSwagger">Chọn vị trí trên map để lấy JSON.</pre></details>`;
+    const $ = id => host.querySelector('#' + id), canvas = $('navCanvas'), ctx = canvas.getContext('2d');
+    const state = {meta: null, map: null, image: null, imageUrl: null, endpoints: [], draft: null, editing: null,
+      snapshot: null, receivedAt: 0, robotId: '', busy: false, generation: 0, timer: null, closed: false,
+      workflow: null, template: null, pending: null, job: null, request: null, dragging: null,seed:null};
+    const say = (message, error = false) => { $('navAction').textContent = message; $('navAction').classList.toggle('nav-error', error); };
+    const active = () => state.pending && !state.pending.done;
+    function persist() {
+      try { if (state.pending) sessionStorage.setItem('mar-navigation-request', JSON.stringify(state.pending));
+        else sessionStorage.removeItem('mar-navigation-request'); } catch (_) { /* In-memory retry remains available. */ }
+    }
+    try {
+      const saved = JSON.parse(sessionStorage.getItem('mar-navigation-request') || 'null');
+      if (saved && UUID.test(saved.body?.mapId || '') && saved.key && !saved.done) {
+        state.pending = saved; $('navMapId').value = saved.body.mapId;
+        say('Có yêu cầu đang theo dõi. Tải map để kiểm tra; nút tiếp tục dùng lại Idempotency-Key cũ.');
+      }
+    } catch (_) { /* Ignore corrupt UI state. */ }
+    function robotId() {
+      const selectedId=options.getRobotId().trim(),id=state.robotId||selectedId;
+      if(selectedId!==id&&!active())throw Error('Robot ID đã đổi; tải lại map để theo dõi đúng robot.');
+      if (!UUID.test(id)) throw Error('Robot ID không hợp lệ.'); return id;
+    }
+    function mapId() { if (!state.meta || $('navMapId').value.trim() !== state.meta.map_id) throw Error('Tải lại Map ID đã chọn trước.'); return state.meta.map_id; }
+    async function api(path, {method = 'GET', body, raw = false, headers = {}} = {}) {
+      const token = options.getToken().trim().replace(/^Bearer\s+/i, '');
+      if (!token) throw Error('Cần access token ADMIN ở đầu trang.');
+      const response = await fetch(path, {method, headers: {Authorization: 'Bearer ' + token,
+        ...(body === undefined ? {} : {'Content-Type': 'application/json'}), ...headers},
+        body: body === undefined ? undefined : JSON.stringify(body), cache: 'no-store', signal: AbortSignal.timeout(10000)});
+      if (!response.ok) { const error = Error(response.status + ' ' + (await response.text()).slice(0, 500)); error.status = response.status; throw error; }
+      return raw ? response : response.status === 204 ? null : response.json();
+    }
+    async function pages(path) {
+      const result = [];
+      for (let page = 0; page < 100; page++) {
+        const data = await api(path + (path.includes('?') ? '&' : '?') + 'page=' + page + '&size=100');
+        if (!Array.isArray(data.content)) throw Error('BE trả danh sách không hợp lệ.');
+        result.push(...data.content);
+        if (data.last === true || page + 1 >= data.totalPages) return result;
+      }
+      throw Error('Danh sách quá lớn; chưa tải đủ để thao tác chính xác.');
+    }
+    function selected() { return state.endpoints.find(e => e.endpointId === $('navEndpoints').value); }
+    function pose() { return state.meta ? freshPose(state.snapshot, state.meta, performance.now() - state.receivedAt) : null; }
+    function controls() {
+      const loaded = !!state.meta && $('navMapId').value.trim() === state.meta.map_id;
+      const locked = state.busy || !!active();
+      $('navLoad').disabled = state.busy || !!(active() && state.meta);
+      $('navUseSaved').disabled = locked;
+      $('navMapId').disabled = locked;
+      $('navActivate').disabled = !loaded || locked || state.map?.status === 'ACTIVE';
+      $('navAssign').disabled = !loaded || locked || state.map?.status !== 'ACTIVE';
+      const session=state.snapshot?.navigationSession,open=session&&['WAITING_FOR_PI','LOCALIZING','READY'].includes(session.state)&&session.mapId===state.meta?.map_id;
+      $('navAssign').disabled ||= !!open || state.meta?.navigation_reload_safe===false;
+      $('navNormalize').disabled=!loaded||locked||state.meta?.navigation_reload_safe!==false;
+      $('navCloseSession').disabled=locked||!open;
+      $('navSendSeed').disabled=locked||!open||!state.seed;
+      $('navGlobal').disabled=locked||!open;
+      for(const id of ['navSeedMode','navSeedX','navSeedY','navSeedYaw'])$(id).disabled=!loaded||locked;
+      for (const id of ['navNewPoint', 'navEndpoints', 'navPointCode', 'navPointName', 'navX', 'navY', 'navYaw']) $(id).disabled = !loaded || locked;
+      $('navSavePoint').disabled = !loaded || locked || !state.draft;
+      $('navPrepare').disabled = locked;
+      $('navMove').disabled = state.busy || !loaded || (active() ? !state.pending.retryable : !selected() || !state.workflow || session?.state!=='READY'||!pose());
+      $('navMove').textContent = active() && state.pending.retryable ? 'Tiếp tục yêu cầu vừa gửi' : 'Đi tới endpoint bằng robot của phiên';
+      $('navCancel').disabled = state.busy || !active() || !state.pending.requestId;
+    }
+    async function mutate(operation) {
+      if (state.busy) return;
+      state.busy = true; controls();
+      try { await operation(); } catch (error) { say(error.message, true); }
+      finally { state.busy = false; controls(); }
+    }
+    function endpointBody() {
+      mapId();
+      if (['navX', 'navY', 'navYaw'].some(id => $(id).value.trim() === '')) throw Error('Cần X, Y và hướng endpoint.');
+      const xM = Number($('navX').value), yM = Number($('navY').value), degrees = Number($('navYaw').value);
+      if (!Number.isFinite(degrees) || degrees < -180 || degrees > 180 || !inside(state.meta, xM, yM)) throw Error('Điểm phải nằm trong map; hướng từ -180° đến 180°.');
+      const old = state.editing;
+      return {mapId: state.meta.map_id, zoneId: old?.zoneId ?? null, roomId: old?.roomId ?? null,
+        endpointCode: $('navPointCode').value.trim(), endpointName: $('navPointName').value.trim(),
+        endpointType: old?.endpointType ?? 'WAYPOINT', xM, yM, yawRad: angle(degrees * Math.PI / 180),
+        active: old?.active ?? true, accessible: old?.accessible ?? true, publicVisible: old?.publicVisible ?? false,
+        description: old?.description ?? 'Đặt trên map đã lưu qua trang điều khiển'};
+    }
+    function updateDraft() {
+      if (!state.meta) return;
+      try { const body = endpointBody(); state.draft = body; $('navSwagger').textContent = JSON.stringify(body, null, 2); }
+      catch (error) { state.draft = null; $('navSwagger').textContent = error.message; }
+      controls(); draw();
+    }
+    function arrow(x, y, yaw, color, label, radius) {
+      const p = mapToPixel(state.meta, x, y), direction = -(yaw - state.meta.origin_yaw_rad);
+      ctx.save(); ctx.translate(p.u, p.v); ctx.rotate(direction);
+      ctx.fillStyle = color; ctx.strokeStyle = '#fff'; ctx.lineWidth = .6;
+      ctx.beginPath(); ctx.arc(0, 0, radius, 0, 2 * Math.PI); ctx.fill(); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(radius * 2, 0); ctx.lineTo(radius * .2, -radius * .7); ctx.lineTo(radius * .2, radius * .7); ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.restore();
+      if (label) { ctx.fillStyle = color; ctx.font = Math.max(3, radius) + 'px system-ui'; ctx.fillText(label, p.u + radius + 1, p.v - radius - 1); }
+    }
+    function draw() {
+      if (!state.image || !state.meta) return;
+      ctx.imageSmoothingEnabled = false; ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(state.image, 0, 0, canvas.width, canvas.height);
+      const radius = Math.max(1.5, .07 / state.meta.resolution_m_per_pixel);
+      for (const e of state.endpoints) if (inside(state.meta, e.xM, e.yM)) arrow(e.xM, e.yM, e.yawRad, e.endpointId === selected()?.endpointId ? '#7427bd' : '#157347', e.endpointCode, radius);
+      if (state.draft) arrow(state.draft.xM, state.draft.yM, state.draft.yawRad, '#dc7400', '', radius);
+      if(state.seed)arrow(state.seed.xM,state.seed.yM,state.seed.yawRad,'#bd7515','Ước lượng khởi tạo',radius*1.4);
+      const current = pose();
+      if (current) {
+        arrow(current.xM, current.yM, current.yawRad, '#0879ee', '', radius * 1.6);
+        $('navPose').textContent = `Robot ${current.robotId}\nX=${current.xM.toFixed(3)} m · Y=${current.yM.toFixed(3)} m · hướng ${(current.yawRad * 180 / Math.PI).toFixed(1)}°`;
+      } else $('navPose').textContent = 'Chưa có vị trí mới, đúng map và hash đã chọn. Cần Pi nạp map, định vị AMCL và gửi pose mới; không hiển thị pose cũ.';
+    }
+    function showEndpoints(id = '') {
+      $('navEndpoints').replaceChildren(new Option('Chọn endpoint', ''));
+      for (const e of state.endpoints) $('navEndpoints').add(new Option(e.endpointCode + ' — ' + e.endpointName + (e.active && e.accessible ? '' : ' (chưa khả dụng)'), e.endpointId));
+      $('navEndpoints').value = id;
+    }
+    function clearPoint() {
+      state.draft = state.editing = null; $('navEndpoints').value = '';
+      for (const id of ['navX', 'navY', 'navPointCode', 'navPointName']) $(id).value = '';
+      $('navYaw').value = '0'; $('navPointId').textContent = 'Đang đặt endpoint mới. Bấm rồi kéo trên map để chọn hướng.';
+      $('navSwagger').textContent = 'Chọn vị trí trên map để lấy JSON.'; controls(); draw();
+    }
+    async function endpoints(id = '') {
+      state.endpoints = (await pages('/api/v1/endpoints')).filter(e => e.mapId === state.meta.map_id);
+      showEndpoints(id); draw();
+    }
+    async function loadMap() {
+      if (active() && state.meta) throw Error('Theo dõi/hủy yêu cầu hiện tại trước khi đổi map.');
+      const id = $('navMapId').value.trim(); if (!UUID.test(id)) throw Error('Map ID không hợp lệ.');
+      const generation = ++state.generation; clearTimeout(state.timer);
+      state.seed=null;state.dragging=null;
+      for(const field of ['navSeedX','navSeedY'])$(field).value='';
+      state.meta = state.map = state.image = state.snapshot = null; canvas.hidden = true; clearPoint();
+      if (state.imageUrl) URL.revokeObjectURL(state.imageUrl); state.imageUrl = null;
+      const [map, meta, response] = await Promise.all([api('/api/v1/maps/' + id), api('/api/v1/maps/' + id + '/image-metadata'),
+        api('/api/v1/maps/' + id + '/image.png', {raw: true, headers: {Accept: 'image/png'}})]);
+      geometry(meta);
+      if (meta.map_id !== id || map.mapId !== id || map.assetHash?.toLowerCase() !== meta.asset_hash.toLowerCase() ||
+          response.headers.get('X-Map-Asset-Hash')?.toLowerCase() !== meta.asset_hash.toLowerCase() ||
+          response.headers.get('Content-Type')?.split(';')[0] !== 'image/png') throw Error('Ảnh và metadata không cùng map/hash.');
+      const url = URL.createObjectURL(await response.blob()), image = new Image();
+      try { image.src = url; await image.decode(); } catch (error) { URL.revokeObjectURL(url); throw error; }
+      if (generation !== state.generation) { URL.revokeObjectURL(url); return; }
+      if (image.naturalWidth !== meta.width_px || image.naturalHeight !== meta.height_px) { URL.revokeObjectURL(url); throw Error('Kích thước PNG khác metadata.'); }
+      state.meta = meta; state.map = map; state.image = image; state.imageUrl = url;
+      state.robotId = options.getRobotId().trim();
+      canvas.width = meta.width_px; canvas.height = meta.height_px;
+      canvas.style.width = 'min(100%, ' + Math.max(180, 650 * meta.width_px / meta.height_px) + 'px)'; canvas.hidden = false;
+      $('navMapInfo').textContent = `${map.mapName} · ${map.status} · ${meta.width_px} × ${meta.height_px} ô · ${(meta.resolution_m_per_pixel * 100).toFixed(1)} cm/ô · frame ${meta.frame_id}`;
+      await endpoints();
+      if (state.pending?.body.mapId === id) {
+        $('navEndpoints').value = state.pending.body.destinationEndpointId;
+        if (selected()) $('navEndpoints').onchange();
+      }
+      say('Đã tải map thật. Chọn endpoint đã lưu hoặc bấm/kéo để đặt điểm mới.');
+      controls(); draw(); poll(generation);
+    }
+    async function snapshot() {
+      const value = await api('/api/v1/robots/' + robotId() + '/snapshot');
+      if (value.robot?.robotId !== robotId()) throw Error('Snapshot không đúng robot.');
+      state.snapshot = value; state.receivedAt = performance.now();
+      const session=value.navigationSession;
+      $('navSessionStatus').textContent=session?.sessionId?`Phiên ${session.sessionId} · ${session.state} · ${session.localization?.reason||'chờ Pi nạp map và xác minh vị trí'} · hết hạn ${session.expiresAt}`:'Chưa mở phiên map tạm.';
+      $('navPiCommand').textContent=session?.sessionId&&session.mapId===state.meta?.map_id&&['WAITING_FOR_PI','LOCALIZING','READY'].includes(session.state)?'Trong container, sau khi dừng robot.zsh run:\ncd /home/ubuntu/mediassist-mqtt-2026-10-08\nzsh tools/navigation_session.zsh --session-id '+session.sessionId:'Mở phiên để lấy lệnh khởi động Pi.';
+      $('navRobotStatus').textContent = `Robot theo dõi: ${value.robot.robotId} · ${value.robot.status} · MQTT ${value.mqttConnected ? 'đã nối' : 'chưa nối'} · dispatch ${value.dispatchReady ? 'sẵn sàng' : 'chưa sẵn sàng'}${value.sessionFailureReason ? ' · ' + value.sessionFailureReason : ''}`;
+      controls();draw(); return value;
+    }
+    async function trackRequest() {
+      const p = state.pending; if (!p?.requestId) return;
+      const [request, jobs] = await Promise.all([api('/api/v1/service-requests/' + p.requestId), pages('/api/v1/jobs?requestId=' + p.requestId)]);
+      if (p !== state.pending) return;
+      state.request = request;
+      if (jobs.some(j => j.serviceRequestId !== p.requestId)) throw Error('BE trả job khác request đang theo dõi.');
+      const job = jobs[0]; let detail = null;
+      if (job) {
+        detail = await api('/api/v1/jobs/' + job.jobId); state.job = detail.job;
+        if (detail.job.serviceRequestId !== p.requestId) throw Error('Chi tiết job khác request đang theo dõi.');
+        if (detail.job.robotId) state.robotId = detail.job.robotId;
+        if(p.body.robotId&&detail.job.robotId&&detail.job.robotId!==p.body.robotId)throw Error('Job khác robot của phiên đã chọn; kiểm tra BE trước khi tiếp tục.');
+        if (TERMINAL.has(detail.job.status)) { p.done = true; p.retryable = false; persist(); }
+        else if (detail.job.status === 'RECOVERY_REQUIRED') say('Job cần khôi phục. Không tạo thêm MOVE; xem errorCode và bằng chứng dừng trong chi tiết.', true);
+      } else if (['CANCELLED', 'FAILED'].includes(request.status)) { p.done = true; p.retryable = false; persist(); }
+      $('navReceipt').textContent = JSON.stringify({request, job: detail?.job ?? null, steps: detail?.steps ?? []}, null, 2);
+      if (p.done) say('Yêu cầu ' + p.requestId + ' · Job ' + (detail?.job.status ?? request.status) + (detail?.job.errorCode ? ' · ' + detail.job.errorCode : ''));
+      controls();
+    }
+    async function poll(generation) {
+      if (state.closed || generation !== state.generation || !state.meta) return;
+      try { await trackRequest(); await snapshot(); }
+      catch (error) { state.snapshot = null; $('navRobotStatus').textContent = 'Chưa cập nhật được: ' + error.message; draw();
+        if (error.status === 401 || error.status === 403) return; }
+      if (!state.closed && generation === state.generation) state.timer = setTimeout(() => poll(generation), 1000);
+    }
+    async function template() { if (!state.template) state.template = await api('/navigation-move-workflow.json'); return state.template; }
+    async function requireWorkflow(id) {
+      if (!UUID.test(id || '')) throw Error('Chuẩn bị workflow MOVE trước.');
+      const detail = await api('/api/v1/admin/workflows/' + id), expected = templateContract(await template());
+      if (stable(workflowContract(detail)) !== stable(expected) || detail.workflow.status !== 'PUBLISHED' || !detail.workflow.acceptsNewJobs) throw Error('Workflow phải đã publish, nhận job mới và đúng hợp đồng một step MOVE của trang này.');
+      state.workflow = detail; $('navWorkflowId').value = id; return detail;
+    }
+    async function prepareWorkflow() {
+      const definition = await template(), code = definition.workflow.workflowCode;
+      const candidates = (await pages('/api/v1/admin/workflows')).filter(w => w.workflowCode === code).sort((a, b) => b.versionNo - a.versionNo);
+      const expected = stable(templateContract(definition)); let detail = null;
+      for (const candidate of candidates) {
+        const item = await api('/api/v1/admin/workflows/' + candidate.workflowId);
+        if (stable(workflowContract(item)) === expected && (['DRAFT', 'VALIDATED'].includes(item.workflow.status) || item.workflow.status === 'PUBLISHED' && item.workflow.acceptsNewJobs)) { detail = item; break; }
+      }
+      if (!detail) {
+        const body = JSON.parse(JSON.stringify(definition)); body.workflow.versionNo = Math.max(0, ...candidates.map(w => w.versionNo)) + 1;
+        detail = await api('/api/v1/admin/workflows/graph', {method: 'POST', body});
+      }
+      const id = detail.workflow.workflowId;
+      if (['DRAFT', 'VALIDATED'].includes(detail.workflow.status)) {
+        await api('/api/v1/admin/workflows/' + id + '/validate', {method: 'POST', body: {}});
+        await api('/api/v1/admin/workflows/' + id + '/publish', {method: 'POST', body: {}});
+      }
+      await requireWorkflow(id); say('Workflow MOVE đã sẵn sàng: ' + id + '. Chưa tạo job hay di chuyển robot.');
+    }
+    async function move() {
+      if (options.isMappingActive()) throw Error('Kết thúc phiên quét trước khi chạy navigation.');
+      let pending = state.pending;
+      if (!pending || pending.done) {
+        const id = mapId(), endpoint = selected();
+        if (!endpoint?.active || !endpoint.accessible) throw Error('Chọn endpoint đã lưu, active và accessible.');
+        if (state.editing) {
+          const draft = endpointBody();
+          if (Math.hypot(draft.xM - endpoint.xM, draft.yM - endpoint.yM) > 1e-8 || Math.abs(angle(draft.yawRad - endpoint.yawRad)) > 1e-8) {
+            throw Error('Lưu thay đổi vị trí/hướng endpoint trước khi chạy MOVE.');
+          }
+        }
+        // Refetch catalog and pose so stale browser state cannot authorize a MOVE.
+        const [map, point] = await Promise.all([api('/api/v1/maps/' + id), api('/api/v1/endpoints/' + endpoint.endpointId)]);
+        if (map.status !== 'ACTIVE' || map.assetHash?.toLowerCase() !== state.meta.asset_hash.toLowerCase()) throw Error('Map phải ACTIVE và đúng phiên bản đang hiển thị.');
+        if (point.mapId !== id || !point.active || !point.accessible || !inside(state.meta, point.xM, point.yM)) throw Error('Endpoint đã đổi map/trạng thái hoặc nằm ngoài map.');
+        if (stable([point.xM, point.yM, point.yawRad]) !== stable([endpoint.xM, endpoint.yM, endpoint.yawRad])) throw Error('Endpoint đã thay đổi. Tải lại map/endpoint trước khi chạy.');
+        const detail = await requireWorkflow($('navWorkflowId').value), current = await snapshot();
+        if (current.robot.status !== 'IDLE' || !current.dispatchReady || !pose()) throw Error('Robot chưa IDLE/sẵn sàng hoặc chưa có pose định vị mới đúng map và hash.');
+        const session=current.navigationSession;
+        if(session?.state!=='READY'||session.mapId!==id)throw Error('Phiên map chưa xác minh vị trí.');
+        pending = {key: crypto.randomUUID(), body: {mapId: id, workflowId: detail.workflow.workflowId,robotId:robotId(),navigationSessionId:session.sessionId,
+          destinationEndpointId: point.endpointId, targetMode: 'ENDPOINT', navigationMode: 'STANDARD',
+          passengerCount: 1, priority: 50, note: 'Đi tới endpoint từ bản đồ đã lưu', data: {}}, retryable: true, done: false};
+        state.pending = pending; persist();
+      }
+      try {
+        if (!pending.requestId) {
+          const created = await api('/api/v1/navigation-requests', {method: 'POST', body: pending.body, headers: {'Idempotency-Key': pending.key}});
+          if (!UUID.test(created.request?.serviceRequestId || '')) throw Error('BE chưa trả serviceRequestId. Giữ nguyên yêu cầu để thử lại.');
+          pending.requestId = created.request.serviceRequestId; persist();
+        }
+        const request = await api('/api/v1/service-requests/' + pending.requestId);
+        if (request.status === 'DRAFT') await api('/api/v1/service-requests/' + pending.requestId + '/submit', {method: 'POST', body: {}});
+        pending.retryable = false; persist();
+        say('Đã gửi yêu cầu ' + pending.requestId + '. BE phân công robot và dispatch step MOVE; đang chờ phản hồi Pi.');
+        await trackRequest(); await snapshot();
+      } catch (error) { pending.retryable = true; persist(); throw error; }
+    }
+
+    $('navLoad').onclick = () => mutate(loadMap);
+    $('navUseSaved').onclick = () => mutate(async () => { const id = options.getSavedMapId(); if (!UUID.test(id)) throw Error('Xem map đã lưu của job ở trên trước.'); $('navMapId').value = id; await loadMap(); });
+    $('navNewPoint').onclick = clearPoint;
+    $('navEndpoints').onchange = () => {
+      const point = selected(); if (!point) return clearPoint();
+      state.editing = point;
+      for (const [id, value] of Object.entries({navX: point.xM, navY: point.yM, navYaw: point.yawRad * 180 / Math.PI, navPointCode: point.endpointCode, navPointName: point.endpointName})) $(id).value = value;
+      $('navPointId').textContent = 'Endpoint ID: ' + point.endpointId; updateDraft();
+    };
+    for (const id of ['navX', 'navY', 'navYaw', 'navPointCode', 'navPointName']) $(id).addEventListener('input', updateDraft);
+    $('navSavePoint').onclick = () => mutate(async () => {
+      if (active()) throw Error('Không sửa endpoint trong khi yêu cầu đang chạy.');
+      const body = endpointBody(); if (!body.endpointCode || !body.endpointName) throw Error('Cần mã và tên endpoint.');
+      await api('/api/v1/maps/'+mapId()+'/validate-navigation-point',{method:'POST',body:{xM:body.xM,yM:body.yM}});
+      const existing = state.editing;
+      const saved = await api('/api/v1/endpoints' + (existing ? '/' + existing.endpointId : ''), {method: existing ? 'PUT' : 'POST', body});
+      await endpoints(saved.endpointId); $('navEndpoints').onchange();
+      say('Đã lưu endpoint ' + saved.endpointId + '. Chưa gửi MOVE; Nav2 sẽ kiểm tra khả năng đi tới khi chạy.');
+    });
+    $('navActivate').onclick = () => mutate(async () => {
+      if (options.isMappingActive()) throw Error('Kết thúc phiên quét trước khi đổi map active.');
+      await api('/api/v1/maps/' + mapId() + '/activate', {method: 'POST', body: {}});
+      await loadMap(); say('Map đã ACTIVE trên BE. Cần gán map và nạp vào Pi trước khi chạy.');
+    });
+    $('navAssign').onclick = () => mutate(async () => {
+      if (options.isMappingActive()) throw Error('Kết thúc phiên quét trước khi gán map.');
+      state.robotId = options.getRobotId().trim(); const id = robotId();
+      const current = await api('/api/v1/robots/' + id + '/snapshot');
+      if (current.activeJobId) throw Error('Robot còn job đang chạy/khôi phục. Chưa đổi map.');
+      await api('/api/v1/robots/'+id+'/navigation-session',{method:'POST',body:{mapId:mapId(),durationSec:7200}});
+      await snapshot();say('Đã mở phiên map tạm. Chạy lệnh Pi bên trên, rồi chọn vị trí khởi tạo hoặc tìm toàn cục.');
+    });
+    $('navNormalize').onclick=()=>mutate(async()=>{
+      const copy=await api('/api/v1/maps/'+mapId()+'/navigation-copy',{method:'POST',body:{}});
+      $('navMapId').value=copy.mapId;await loadMap();say('Đã tạo bản map có ngưỡng unknown đúng và sao chép endpoint. Kích hoạt map mới trước khi mở phiên.');
+    });
+    $('navCloseSession').onclick=()=>mutate(async()=>{
+      const session=state.snapshot?.navigationSession;if(!session?.sessionId)throw Error('Không có phiên đang mở.');
+      await api('/api/v1/robots/'+robotId()+'/navigation-session/close',{method:'POST',body:{sessionId:session.sessionId}});
+      await snapshot();say('Đã đóng phiên. Dừng terminal navigation; robot.zsh run bình thường vẫn dùng cấu hình quét map ban đầu.');
+    });
+    function updateSeed(){
+      const values=['navSeedX','navSeedY','navSeedYaw'].map(id=>$(id).value.trim());
+      const [x,y,yaw]=values.map(Number);state.seed=values.every(Boolean)&&inside(state.meta||{},x,y)&&Number.isFinite(yaw)&&Math.abs(yaw)<=180?{xM:x,yM:y,yawRad:yaw*Math.PI/180}:null;
+      controls();draw();
+    }
+    for(const id of ['navSeedX','navSeedY','navSeedYaw'])$(id).addEventListener('input',updateSeed);
+    async function initialize(mode){
+      const session=state.snapshot?.navigationSession;if(!session?.sessionId||session.mapId!==mapId())throw Error('Mở phiên của đúng map trước.');
+      await api('/api/v1/robots/'+robotId()+'/navigation-session/initialization',{method:'POST',body:{sessionId:session.sessionId,mode,...(mode==='SEED'?state.seed:{})}});
+      state.snapshot=null;draw();await snapshot();say('Đã yêu cầu khởi tạo; chờ AMCL xác minh. Chưa gửi MOVE.');
+    }
+    $('navSendSeed').onclick=()=>mutate(()=>initialize('SEED'));
+    $('navGlobal').onclick=()=>mutate(()=>initialize('GLOBAL'));
+    $('navPrepare').onclick = () => mutate(prepareWorkflow);
+    $('navMove').onclick = () => mutate(move);
+    $('navCancel').onclick = () => mutate(async () => {
+      if (!state.pending?.requestId || state.pending.done) throw Error('Chưa có yêu cầu đang chạy để hủy.');
+      await api('/api/v1/service-requests/' + state.pending.requestId + '/cancel', {method: 'POST', body: {reason: 'Người vận hành hủy dẫn đường từ trang map'}});
+      state.pending.retryable = false; persist();
+      say('BE đã nhận yêu cầu hủy. Chờ job/Pi xác nhận dừng; không coi HTTP thành công là robot đã dừng.');
+      await trackRequest();
+    });
+    $('navRefresh').onclick = () => mutate(async () => {
+      mapId(); await trackRequest(); await snapshot();
+      clearTimeout(state.timer); state.timer = setTimeout(() => poll(state.generation), 1000);
+      say(pose() ? 'Đã nhận vị trí mới đúng map.' : 'Chưa có pose hợp lệ trên map đã chọn; xem trạng thái robot.');
+    });
+    const pointer = event => { const box = canvas.getBoundingClientRect(); return {u: (event.clientX - box.left) * canvas.width / box.width, v: (event.clientY - box.top) * canvas.height / box.height}; };
+    canvas.addEventListener('pointerdown', event => {
+      if (!state.meta || state.busy || active() || event.button !== 0) return;
+      const p = pointer(event); if (p.u < 0 || p.v < 0 || p.u >= canvas.width || p.v >= canvas.height) return;
+      if($('navSeedMode').checked){
+        const point=pixelToMap(state.meta,Math.floor(p.u)+.5,Math.floor(p.v)+.5);
+        $('navSeedX').value=point.xM;$('navSeedY').value=point.yM;
+        state.dragging={point,x:event.clientX,y:event.clientY,seed:true};canvas.setPointerCapture(event.pointerId);updateSeed();return;
+      }
+      clearPoint(); const point = pixelToMap(state.meta, Math.floor(p.u) + .5, Math.floor(p.v) + .5);
+      $('navX').value = point.xM; $('navY').value = point.yM;
+      state.dragging = {point, x: event.clientX, y: event.clientY}; canvas.setPointerCapture(event.pointerId); updateDraft();
+    });
+    canvas.addEventListener('pointermove', event => {
+      if (!state.dragging) return;
+      if (Math.hypot(event.clientX - state.dragging.x, event.clientY - state.dragging.y) < 6) return;
+      const p = pointer(event), end = pixelToMap(state.meta, p.u, p.v), start = state.dragging.point;
+      if(state.dragging.seed){$('navSeedYaw').value=(Math.atan2(end.yM-start.yM,end.xM-start.xM)*180/Math.PI).toFixed(2);updateSeed();return;}
+      $('navYaw').value = (Math.atan2(end.yM - start.yM, end.xM - start.xM) * 180 / Math.PI).toFixed(2); updateDraft();
+    });
+    const release = () => { state.dragging = null; };
+    canvas.addEventListener('pointerup', release); canvas.addEventListener('pointercancel', release);
+    $('navMapId').addEventListener('input', () => {
+      state.generation++; clearTimeout(state.timer); state.meta = state.image = state.snapshot = null; canvas.hidden = true;
+      state.endpoints = []; showEndpoints(); clearPoint(); $('navMapInfo').textContent = 'Map ID đã đổi; tải map trước khi thao tác.';
+      state.seed=null;for(const id of ['navSeedX','navSeedY'])$(id).value='';
+      $('navPose').textContent = 'Chưa tải map mới.'; controls();
+    });
+    const expiryTimer = setInterval(draw, 250);
+    window.addEventListener('pagehide', () => { state.closed = true; state.generation++; clearTimeout(state.timer); clearInterval(expiryTimer); if (state.imageUrl) URL.revokeObjectURL(state.imageUrl); });
+    controls();
+    return {loadMap, state};
+  }
+  return {geometry, pixelToMap, mapToPixel, inside, freshPose, workflowContract, templateContract, mount};
+});
+
+</script>
+<!-- END_NAVIGATION_SCRIPT -->
+<script>
+autoMapping=MappingAutonomy.mount({
+  context:()=>({job,session,mapping,busy,jogActive:jog.active}),buttons,
+  send:(autonomy,scope)=>api('/api/v1/jobs/'+encodeURIComponent(scope.job)+'/mapping-autonomy',{
+    mappingSessionId:scope.session,autonomy,controlSessionId,controlSequence:++controlSequence,
+    requestedAt:new Date().toISOString()},false,{timeoutMs:1200,keepalive:autonomy.action==='STOP'}),
+  manualStop:()=>jog.stop(),save:requestSaveMap
+});buttons();
+</script>
+<script>SavedMapNavigation.mount({element:document.getElementById('mapNavigation'),getToken:()=>document.getElementById('token').value,getRobotId:()=>document.getElementById('robot').value,isMappingActive:()=>mapping||jog.active,getSavedMapId:()=>document.getElementById('savedMapId').value});</script>
+</html>

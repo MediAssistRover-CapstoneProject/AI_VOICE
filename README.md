@@ -3,6 +3,16 @@
 > **Phân hệ Trợ lý Giọng nói Tiếng Việt thông minh cho Robot Bệnh viện MediAssistRover**  
 > Tích hợp trực tiếp với cơ sở dữ liệu bệnh viện (`HospitalInformationArticle` & `HospitalInformation` trong MySQL) và Backend Spring Boot 3.5 qua Device JWT Bearer Authentication.
 
+## Thành phần tích hợp
+
+Repository này chứa đầy đủ ba phần của trợ lý giọng nói:
+
+- `src/`: AI Voice service Python hiện có.
+- `backend/`: Backend Spring Boot, MySQL/Qdrant RAG, upload/OCR tài liệu, STT/TTS và các trang HTML kiosk/admin/staff.
+- `mentorpi_ws/`: ROS 2 package `mediassist_voice_bridge` để kết nối MentorPi M1 với backend. Phần này không cần chạy khi thử nghiệm hoàn toàn trên máy tính.
+
+Để thử nghiệm giao diện máy tính, chạy Docker Compose trong `backend/`, sau đó mở `http://localhost:8080/assistant-kiosk.html`. Không commit file `.env`; hãy sao chép cấu hình từ `.env.example` tại từng thành phần.
+
 ---
 
 ## 🌟 1. Tổng quan Kiến trúc

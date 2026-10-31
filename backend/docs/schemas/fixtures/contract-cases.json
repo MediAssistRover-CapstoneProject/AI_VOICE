@@ -1,0 +1,2965 @@
+[
+  {
+    "schema": "pi-step-inputs.schema.json",
+    "name": "input-0",
+    "valid": true,
+    "instance": {
+      "stepType": "MOVE",
+      "params": {
+        "map_id": "11111111-1111-4111-8111-111111111111",
+        "endpoint_id": "22222222-2222-4222-8222-222222222222",
+        "mode": "NORMAL",
+        "max_speed_mps": 0.05
+      }
+    }
+  },
+  {
+    "schema": "mqtt-command.schema.json",
+    "name": "command-0",
+    "valid": true,
+    "instance": {
+      "protocolVersion": "1.0",
+      "contract": "MAR-STEP-2",
+      "messageType": "COMMAND",
+      "commandId": "11111111-1111-4111-8111-111111111111",
+      "correlationId": "22222222-2222-4222-8222-222222222222",
+      "robotId": "11111111-1111-4111-8111-111111111111",
+      "transportSessionId": "22222222-2222-4222-8222-222222222222",
+      "commandType": "EXECUTE_STEP",
+      "expiresAt": "2026-10-12T00:00:00Z",
+      "step": {
+        "jobId": "11111111-1111-4111-8111-111111111111",
+        "jobStepId": "22222222-2222-4222-8222-222222222222",
+        "stepId": "11111111-1111-4111-8111-111111111111",
+        "stepCode": "TEST",
+        "stepType": "MOVE",
+        "visitNo": 1,
+        "operationKey": "11111111-1111-4111-8111-111111111111:TEST:1",
+        "timeoutSec": 5,
+        "params": {
+          "map_id": "11111111-1111-4111-8111-111111111111",
+          "endpoint_id": "22222222-2222-4222-8222-222222222222",
+          "mode": "NORMAL",
+          "max_speed_mps": 0.05
+        }
+      }
+    }
+  },
+  {
+    "schema": "pi-step-inputs.schema.json",
+    "name": "input-1",
+    "valid": true,
+    "instance": {
+      "stepType": "CONTROL_HARDWARE",
+      "params": {
+        "compartment_id": "CART_MAIN",
+        "action": "LOCK_COMPARTMENT"
+      }
+    }
+  },
+  {
+    "schema": "mqtt-command.schema.json",
+    "name": "command-1",
+    "valid": true,
+    "instance": {
+      "protocolVersion": "1.0",
+      "contract": "MAR-STEP-2",
+      "messageType": "COMMAND",
+      "commandId": "11111111-1111-4111-8111-111111111111",
+      "correlationId": "22222222-2222-4222-8222-222222222222",
+      "robotId": "11111111-1111-4111-8111-111111111111",
+      "transportSessionId": "22222222-2222-4222-8222-222222222222",
+      "commandType": "EXECUTE_STEP",
+      "expiresAt": "2026-10-12T00:00:00Z",
+      "step": {
+        "jobId": "11111111-1111-4111-8111-111111111111",
+        "jobStepId": "22222222-2222-4222-8222-222222222222",
+        "stepId": "11111111-1111-4111-8111-111111111111",
+        "stepCode": "TEST",
+        "stepType": "CONTROL_HARDWARE",
+        "visitNo": 1,
+        "operationKey": "11111111-1111-4111-8111-111111111111:TEST:1",
+        "timeoutSec": 5,
+        "params": {
+          "compartment_id": "CART_MAIN",
+          "action": "LOCK_COMPARTMENT"
+        }
+      }
+    }
+  },
+  {
+    "schema": "pi-step-inputs.schema.json",
+    "name": "input-2",
+    "valid": true,
+    "instance": {
+      "stepType": "CONTROL_HARDWARE",
+      "params": {
+        "compartment_id": "CART_MAIN",
+        "action": "UNLOCK_COMPARTMENT"
+      }
+    }
+  },
+  {
+    "schema": "mqtt-command.schema.json",
+    "name": "command-2",
+    "valid": true,
+    "instance": {
+      "protocolVersion": "1.0",
+      "contract": "MAR-STEP-2",
+      "messageType": "COMMAND",
+      "commandId": "11111111-1111-4111-8111-111111111111",
+      "correlationId": "22222222-2222-4222-8222-222222222222",
+      "robotId": "11111111-1111-4111-8111-111111111111",
+      "transportSessionId": "22222222-2222-4222-8222-222222222222",
+      "commandType": "EXECUTE_STEP",
+      "expiresAt": "2026-10-12T00:00:00Z",
+      "step": {
+        "jobId": "11111111-1111-4111-8111-111111111111",
+        "jobStepId": "22222222-2222-4222-8222-222222222222",
+        "stepId": "11111111-1111-4111-8111-111111111111",
+        "stepCode": "TEST",
+        "stepType": "CONTROL_HARDWARE",
+        "visitNo": 1,
+        "operationKey": "11111111-1111-4111-8111-111111111111:TEST:1",
+        "timeoutSec": 5,
+        "params": {
+          "compartment_id": "CART_MAIN",
+          "action": "UNLOCK_COMPARTMENT"
+        }
+      }
+    }
+  },
+  {
+    "schema": "pi-step-inputs.schema.json",
+    "name": "input-3",
+    "valid": true,
+    "instance": {
+      "stepType": "CONTROL_HARDWARE",
+      "params": {
+        "compartment_id": "CART_MAIN",
+        "action": "UNLOCK_COMPARTMENT",
+        "authorization": {
+          "mode": "STAFF_VERIFIED",
+          "verification_id": "11111111-1111-4111-8111-111111111111",
+          "actor_account_id": "22222222-2222-4222-8222-222222222222",
+          "purpose": "DELIVERY_SENDER",
+          "valid_until": "2026-10-12T00:00:00Z"
+        }
+      }
+    }
+  },
+  {
+    "schema": "mqtt-command.schema.json",
+    "name": "command-3",
+    "valid": true,
+    "instance": {
+      "protocolVersion": "1.0",
+      "contract": "MAR-STEP-2",
+      "messageType": "COMMAND",
+      "commandId": "11111111-1111-4111-8111-111111111111",
+      "correlationId": "22222222-2222-4222-8222-222222222222",
+      "robotId": "11111111-1111-4111-8111-111111111111",
+      "transportSessionId": "22222222-2222-4222-8222-222222222222",
+      "commandType": "EXECUTE_STEP",
+      "expiresAt": "2026-10-12T00:00:00Z",
+      "step": {
+        "jobId": "11111111-1111-4111-8111-111111111111",
+        "jobStepId": "22222222-2222-4222-8222-222222222222",
+        "stepId": "11111111-1111-4111-8111-111111111111",
+        "stepCode": "TEST",
+        "stepType": "CONTROL_HARDWARE",
+        "visitNo": 1,
+        "operationKey": "11111111-1111-4111-8111-111111111111:TEST:1",
+        "timeoutSec": 5,
+        "params": {
+          "compartment_id": "CART_MAIN",
+          "action": "UNLOCK_COMPARTMENT",
+          "authorization": {
+            "mode": "STAFF_VERIFIED",
+            "verification_id": "11111111-1111-4111-8111-111111111111",
+            "actor_account_id": "22222222-2222-4222-8222-222222222222",
+            "purpose": "DELIVERY_SENDER",
+            "valid_until": "2026-10-12T00:00:00Z"
+          }
+        }
+      }
+    }
+  },
+  {
+    "schema": "pi-step-inputs.schema.json",
+    "name": "input-4",
+    "valid": true,
+    "instance": {
+      "stepType": "EXECUTE_SENSING",
+      "params": {
+        "sensing_type": "ROBOT_HEALTH"
+      }
+    }
+  },
+  {
+    "schema": "mqtt-command.schema.json",
+    "name": "command-4",
+    "valid": true,
+    "instance": {
+      "protocolVersion": "1.0",
+      "contract": "MAR-STEP-2",
+      "messageType": "COMMAND",
+      "commandId": "11111111-1111-4111-8111-111111111111",
+      "correlationId": "22222222-2222-4222-8222-222222222222",
+      "robotId": "11111111-1111-4111-8111-111111111111",
+      "transportSessionId": "22222222-2222-4222-8222-222222222222",
+      "commandType": "EXECUTE_STEP",
+      "expiresAt": "2026-10-12T00:00:00Z",
+      "step": {
+        "jobId": "11111111-1111-4111-8111-111111111111",
+        "jobStepId": "22222222-2222-4222-8222-222222222222",
+        "stepId": "11111111-1111-4111-8111-111111111111",
+        "stepCode": "TEST",
+        "stepType": "EXECUTE_SENSING",
+        "visitNo": 1,
+        "operationKey": "11111111-1111-4111-8111-111111111111:TEST:1",
+        "timeoutSec": 5,
+        "params": {
+          "sensing_type": "ROBOT_HEALTH"
+        }
+      }
+    }
+  },
+  {
+    "schema": "pi-step-inputs.schema.json",
+    "name": "input-5",
+    "valid": true,
+    "instance": {
+      "stepType": "EXECUTE_SENSING",
+      "params": {
+        "sensing_type": "SIDE_CLEARANCE"
+      }
+    }
+  },
+  {
+    "schema": "mqtt-command.schema.json",
+    "name": "command-5",
+    "valid": true,
+    "instance": {
+      "protocolVersion": "1.0",
+      "contract": "MAR-STEP-2",
+      "messageType": "COMMAND",
+      "commandId": "11111111-1111-4111-8111-111111111111",
+      "correlationId": "22222222-2222-4222-8222-222222222222",
+      "robotId": "11111111-1111-4111-8111-111111111111",
+      "transportSessionId": "22222222-2222-4222-8222-222222222222",
+      "commandType": "EXECUTE_STEP",
+      "expiresAt": "2026-10-12T00:00:00Z",
+      "step": {
+        "jobId": "11111111-1111-4111-8111-111111111111",
+        "jobStepId": "22222222-2222-4222-8222-222222222222",
+        "stepId": "11111111-1111-4111-8111-111111111111",
+        "stepCode": "TEST",
+        "stepType": "EXECUTE_SENSING",
+        "visitNo": 1,
+        "operationKey": "11111111-1111-4111-8111-111111111111:TEST:1",
+        "timeoutSec": 5,
+        "params": {
+          "sensing_type": "SIDE_CLEARANCE"
+        }
+      }
+    }
+  },
+  {
+    "schema": "pi-step-inputs.schema.json",
+    "name": "input-6",
+    "valid": true,
+    "instance": {
+      "stepType": "EXECUTE_SENSING",
+      "params": {
+        "sensing_type": "CROWD_DENSITY",
+        "zone_id": "11111111-1111-4111-8111-111111111111",
+        "window_sec": 3
+      }
+    }
+  },
+  {
+    "schema": "mqtt-command.schema.json",
+    "name": "command-6",
+    "valid": true,
+    "instance": {
+      "protocolVersion": "1.0",
+      "contract": "MAR-STEP-2",
+      "messageType": "COMMAND",
+      "commandId": "11111111-1111-4111-8111-111111111111",
+      "correlationId": "22222222-2222-4222-8222-222222222222",
+      "robotId": "11111111-1111-4111-8111-111111111111",
+      "transportSessionId": "22222222-2222-4222-8222-222222222222",
+      "commandType": "EXECUTE_STEP",
+      "expiresAt": "2026-10-12T00:00:00Z",
+      "step": {
+        "jobId": "11111111-1111-4111-8111-111111111111",
+        "jobStepId": "22222222-2222-4222-8222-222222222222",
+        "stepId": "11111111-1111-4111-8111-111111111111",
+        "stepCode": "TEST",
+        "stepType": "EXECUTE_SENSING",
+        "visitNo": 1,
+        "operationKey": "11111111-1111-4111-8111-111111111111:TEST:1",
+        "timeoutSec": 5,
+        "params": {
+          "sensing_type": "CROWD_DENSITY",
+          "zone_id": "11111111-1111-4111-8111-111111111111",
+          "window_sec": 3
+        }
+      }
+    }
+  },
+  {
+    "schema": "pi-step-inputs.schema.json",
+    "name": "input-7",
+    "valid": true,
+    "instance": {
+      "stepType": "EXECUTE_SENSING",
+      "params": {
+        "sensing_type": "RESTRICTED_ZONE",
+        "zone_id": "11111111-1111-4111-8111-111111111111",
+        "window_sec": 0
+      }
+    }
+  },
+  {
+    "schema": "mqtt-command.schema.json",
+    "name": "command-7",
+    "valid": true,
+    "instance": {
+      "protocolVersion": "1.0",
+      "contract": "MAR-STEP-2",
+      "messageType": "COMMAND",
+      "commandId": "11111111-1111-4111-8111-111111111111",
+      "correlationId": "22222222-2222-4222-8222-222222222222",
+      "robotId": "11111111-1111-4111-8111-111111111111",
+      "transportSessionId": "22222222-2222-4222-8222-222222222222",
+      "commandType": "EXECUTE_STEP",
+      "expiresAt": "2026-10-12T00:00:00Z",
+      "step": {
+        "jobId": "11111111-1111-4111-8111-111111111111",
+        "jobStepId": "22222222-2222-4222-8222-222222222222",
+        "stepId": "11111111-1111-4111-8111-111111111111",
+        "stepCode": "TEST",
+        "stepType": "EXECUTE_SENSING",
+        "visitNo": 1,
+        "operationKey": "11111111-1111-4111-8111-111111111111:TEST:1",
+        "timeoutSec": 5,
+        "params": {
+          "sensing_type": "RESTRICTED_ZONE",
+          "zone_id": "11111111-1111-4111-8111-111111111111",
+          "window_sec": 0
+        }
+      }
+    }
+  },
+  {
+    "schema": "pi-step-inputs.schema.json",
+    "name": "input-8",
+    "valid": true,
+    "instance": {
+      "stepType": "EXECUTE_SENSING",
+      "params": {
+        "sensing_type": "MAPPING",
+        "action": "START",
+        "mapping_session_id": "11111111-1111-4111-8111-111111111111",
+        "preview_rate_hz": 1
+      }
+    }
+  },
+  {
+    "schema": "mqtt-command.schema.json",
+    "name": "command-8",
+    "valid": true,
+    "instance": {
+      "protocolVersion": "1.0",
+      "contract": "MAR-STEP-2",
+      "messageType": "COMMAND",
+      "commandId": "11111111-1111-4111-8111-111111111111",
+      "correlationId": "22222222-2222-4222-8222-222222222222",
+      "robotId": "11111111-1111-4111-8111-111111111111",
+      "transportSessionId": "22222222-2222-4222-8222-222222222222",
+      "commandType": "EXECUTE_STEP",
+      "expiresAt": "2026-10-12T00:00:00Z",
+      "step": {
+        "jobId": "11111111-1111-4111-8111-111111111111",
+        "jobStepId": "22222222-2222-4222-8222-222222222222",
+        "stepId": "11111111-1111-4111-8111-111111111111",
+        "stepCode": "TEST",
+        "stepType": "EXECUTE_SENSING",
+        "visitNo": 1,
+        "operationKey": "11111111-1111-4111-8111-111111111111:TEST:1",
+        "timeoutSec": 5,
+        "params": {
+          "sensing_type": "MAPPING",
+          "action": "START",
+          "mapping_session_id": "11111111-1111-4111-8111-111111111111",
+          "preview_rate_hz": 1
+        }
+      }
+    }
+  },
+  {
+    "schema": "pi-step-inputs.schema.json",
+    "name": "input-9",
+    "valid": true,
+    "instance": {
+      "stepType": "EXECUTE_SENSING",
+      "params": {
+        "sensing_type": "MAPPING",
+        "action": "SAVE",
+        "mapping_session_id": "11111111-1111-4111-8111-111111111111",
+        "artifact_id": "22222222-2222-4222-8222-222222222222"
+      }
+    }
+  },
+  {
+    "schema": "mqtt-command.schema.json",
+    "name": "command-9",
+    "valid": true,
+    "instance": {
+      "protocolVersion": "1.0",
+      "contract": "MAR-STEP-2",
+      "messageType": "COMMAND",
+      "commandId": "11111111-1111-4111-8111-111111111111",
+      "correlationId": "22222222-2222-4222-8222-222222222222",
+      "robotId": "11111111-1111-4111-8111-111111111111",
+      "transportSessionId": "22222222-2222-4222-8222-222222222222",
+      "commandType": "EXECUTE_STEP",
+      "expiresAt": "2026-10-12T00:00:00Z",
+      "step": {
+        "jobId": "11111111-1111-4111-8111-111111111111",
+        "jobStepId": "22222222-2222-4222-8222-222222222222",
+        "stepId": "11111111-1111-4111-8111-111111111111",
+        "stepCode": "TEST",
+        "stepType": "EXECUTE_SENSING",
+        "visitNo": 1,
+        "operationKey": "11111111-1111-4111-8111-111111111111:TEST:1",
+        "timeoutSec": 5,
+        "params": {
+          "sensing_type": "MAPPING",
+          "action": "SAVE",
+          "mapping_session_id": "11111111-1111-4111-8111-111111111111",
+          "artifact_id": "22222222-2222-4222-8222-222222222222"
+        }
+      }
+    }
+  },
+  {
+    "schema": "pi-step-inputs.schema.json",
+    "name": "input-10",
+    "valid": true,
+    "instance": {
+      "stepType": "EXECUTE_SENSING",
+      "params": {
+        "sensing_type": "MAPPING",
+        "action": "STOP",
+        "mapping_session_id": "11111111-1111-4111-8111-111111111111"
+      }
+    }
+  },
+  {
+    "schema": "mqtt-command.schema.json",
+    "name": "command-10",
+    "valid": true,
+    "instance": {
+      "protocolVersion": "1.0",
+      "contract": "MAR-STEP-2",
+      "messageType": "COMMAND",
+      "commandId": "11111111-1111-4111-8111-111111111111",
+      "correlationId": "22222222-2222-4222-8222-222222222222",
+      "robotId": "11111111-1111-4111-8111-111111111111",
+      "transportSessionId": "22222222-2222-4222-8222-222222222222",
+      "commandType": "EXECUTE_STEP",
+      "expiresAt": "2026-10-12T00:00:00Z",
+      "step": {
+        "jobId": "11111111-1111-4111-8111-111111111111",
+        "jobStepId": "22222222-2222-4222-8222-222222222222",
+        "stepId": "11111111-1111-4111-8111-111111111111",
+        "stepCode": "TEST",
+        "stepType": "EXECUTE_SENSING",
+        "visitNo": 1,
+        "operationKey": "11111111-1111-4111-8111-111111111111:TEST:1",
+        "timeoutSec": 5,
+        "params": {
+          "sensing_type": "MAPPING",
+          "action": "STOP",
+          "mapping_session_id": "11111111-1111-4111-8111-111111111111"
+        }
+      }
+    }
+  },
+  {
+    "schema": "pi-step-inputs.schema.json",
+    "name": "input-11",
+    "valid": true,
+    "instance": {
+      "stepType": "WAIT",
+      "params": {
+        "wait_type": "DURATION",
+        "duration_sec": 2
+      }
+    }
+  },
+  {
+    "schema": "mqtt-command.schema.json",
+    "name": "command-11",
+    "valid": true,
+    "instance": {
+      "protocolVersion": "1.0",
+      "contract": "MAR-STEP-2",
+      "messageType": "COMMAND",
+      "commandId": "11111111-1111-4111-8111-111111111111",
+      "correlationId": "22222222-2222-4222-8222-222222222222",
+      "robotId": "11111111-1111-4111-8111-111111111111",
+      "transportSessionId": "22222222-2222-4222-8222-222222222222",
+      "commandType": "EXECUTE_STEP",
+      "expiresAt": "2026-10-12T00:00:00Z",
+      "step": {
+        "jobId": "11111111-1111-4111-8111-111111111111",
+        "jobStepId": "22222222-2222-4222-8222-222222222222",
+        "stepId": "11111111-1111-4111-8111-111111111111",
+        "stepCode": "TEST",
+        "stepType": "WAIT",
+        "visitNo": 1,
+        "operationKey": "11111111-1111-4111-8111-111111111111:TEST:1",
+        "timeoutSec": 5,
+        "params": {
+          "wait_type": "DURATION",
+          "duration_sec": 2
+        }
+      }
+    }
+  },
+  {
+    "schema": "mqtt-command.schema.json",
+    "name": "cancel-step",
+    "valid": true,
+    "instance": {
+      "protocolVersion": "1.0",
+      "contract": "MAR-STEP-2",
+      "messageType": "COMMAND",
+      "commandId": "11111111-1111-4111-8111-111111111111",
+      "correlationId": "22222222-2222-4222-8222-222222222222",
+      "robotId": "11111111-1111-4111-8111-111111111111",
+      "transportSessionId": "22222222-2222-4222-8222-222222222222",
+      "commandType": "CANCEL_STEP",
+      "expiresAt": "2026-10-12T00:00:00Z",
+      "jobId": "11111111-1111-4111-8111-111111111111",
+      "jobStepId": "22222222-2222-4222-8222-222222222222"
+    }
+  },
+  {
+    "schema": "mqtt-command.schema.json",
+    "name": "reject-whole-job",
+    "valid": false,
+    "instance": {
+      "protocolVersion": "1.0",
+      "contract": "MAR-STEP-2",
+      "messageType": "COMMAND",
+      "commandId": "11111111-1111-4111-8111-111111111111",
+      "correlationId": "22222222-2222-4222-8222-222222222222",
+      "robotId": "11111111-1111-4111-8111-111111111111",
+      "transportSessionId": "22222222-2222-4222-8222-222222222222",
+      "commandType": "EXECUTE_STEP",
+      "expiresAt": "2026-10-12T00:00:00Z",
+      "step": {
+        "jobId": "11111111-1111-4111-8111-111111111111",
+        "jobStepId": "22222222-2222-4222-8222-222222222222",
+        "stepId": "11111111-1111-4111-8111-111111111111",
+        "stepCode": "TEST",
+        "stepType": "MOVE",
+        "visitNo": 1,
+        "operationKey": "11111111-1111-4111-8111-111111111111:TEST:1",
+        "timeoutSec": 5,
+        "params": {
+          "map_id": "11111111-1111-4111-8111-111111111111",
+          "endpoint_id": "22222222-2222-4222-8222-222222222222",
+          "mode": "NORMAL",
+          "max_speed_mps": 0.05
+        }
+      },
+      "workflowDefinition": {}
+    }
+  },
+  {
+    "schema": "mqtt-command.schema.json",
+    "name": "reject-dispatch",
+    "valid": false,
+    "instance": {
+      "protocolVersion": "1.0",
+      "contract": "MAR-STEP-2",
+      "messageType": "COMMAND",
+      "commandId": "11111111-1111-4111-8111-111111111111",
+      "correlationId": "22222222-2222-4222-8222-222222222222",
+      "robotId": "11111111-1111-4111-8111-111111111111",
+      "transportSessionId": "22222222-2222-4222-8222-222222222222",
+      "commandType": "DISPATCH",
+      "expiresAt": "2026-10-12T00:00:00Z",
+      "step": {
+        "jobId": "11111111-1111-4111-8111-111111111111",
+        "jobStepId": "22222222-2222-4222-8222-222222222222",
+        "stepId": "11111111-1111-4111-8111-111111111111",
+        "stepCode": "TEST",
+        "stepType": "MOVE",
+        "visitNo": 1,
+        "operationKey": "11111111-1111-4111-8111-111111111111:TEST:1",
+        "timeoutSec": 5,
+        "params": {
+          "map_id": "11111111-1111-4111-8111-111111111111",
+          "endpoint_id": "22222222-2222-4222-8222-222222222222",
+          "mode": "NORMAL",
+          "max_speed_mps": 0.05
+        }
+      }
+    }
+  },
+  {
+    "schema": "mqtt-command.schema.json",
+    "name": "reject-server-step",
+    "valid": false,
+    "instance": {
+      "protocolVersion": "1.0",
+      "contract": "MAR-STEP-2",
+      "messageType": "COMMAND",
+      "commandId": "11111111-1111-4111-8111-111111111111",
+      "correlationId": "22222222-2222-4222-8222-222222222222",
+      "robotId": "11111111-1111-4111-8111-111111111111",
+      "transportSessionId": "22222222-2222-4222-8222-222222222222",
+      "commandType": "EXECUTE_STEP",
+      "expiresAt": "2026-10-12T00:00:00Z",
+      "step": {
+        "jobId": "11111111-1111-4111-8111-111111111111",
+        "jobStepId": "22222222-2222-4222-8222-222222222222",
+        "stepId": "11111111-1111-4111-8111-111111111111",
+        "stepCode": "TEST",
+        "stepType": "INTERACT",
+        "visitNo": 1,
+        "operationKey": "11111111-1111-4111-8111-111111111111:TEST:1",
+        "timeoutSec": 5,
+        "params": {
+          "map_id": "11111111-1111-4111-8111-111111111111",
+          "endpoint_id": "22222222-2222-4222-8222-222222222222",
+          "mode": "NORMAL",
+          "max_speed_mps": 0.05
+        }
+      }
+    }
+  },
+  {
+    "schema": "mqtt-command.schema.json",
+    "name": "reject-unresolved-ref",
+    "valid": false,
+    "instance": {
+      "protocolVersion": "1.0",
+      "contract": "MAR-STEP-2",
+      "messageType": "COMMAND",
+      "commandId": "11111111-1111-4111-8111-111111111111",
+      "correlationId": "22222222-2222-4222-8222-222222222222",
+      "robotId": "11111111-1111-4111-8111-111111111111",
+      "transportSessionId": "22222222-2222-4222-8222-222222222222",
+      "commandType": "EXECUTE_STEP",
+      "expiresAt": "2026-10-12T00:00:00Z",
+      "step": {
+        "jobId": "11111111-1111-4111-8111-111111111111",
+        "jobStepId": "22222222-2222-4222-8222-222222222222",
+        "stepId": "11111111-1111-4111-8111-111111111111",
+        "stepCode": "TEST",
+        "stepType": "MOVE",
+        "visitNo": 1,
+        "operationKey": "11111111-1111-4111-8111-111111111111:TEST:1",
+        "timeoutSec": 5,
+        "params": {
+          "map_id": "11111111-1111-4111-8111-111111111111",
+          "endpoint_id": {
+            "$ref": "/inputs/endpoint_id"
+          },
+          "mode": "NORMAL",
+          "max_speed_mps": 0.05
+        }
+      }
+    }
+  },
+  {
+    "schema": "mqtt-command.schema.json",
+    "name": "reject-group",
+    "valid": false,
+    "instance": {
+      "protocolVersion": "1.0",
+      "contract": "MAR-STEP-2",
+      "messageType": "COMMAND",
+      "commandId": "11111111-1111-4111-8111-111111111111",
+      "correlationId": "22222222-2222-4222-8222-222222222222",
+      "robotId": "11111111-1111-4111-8111-111111111111",
+      "transportSessionId": "22222222-2222-4222-8222-222222222222",
+      "commandType": "EXECUTE_STEP",
+      "expiresAt": "2026-10-12T00:00:00Z",
+      "step": {
+        "jobId": "11111111-1111-4111-8111-111111111111",
+        "jobStepId": "22222222-2222-4222-8222-222222222222",
+        "stepId": "11111111-1111-4111-8111-111111111111",
+        "stepCode": "TEST",
+        "stepType": "MOVE",
+        "visitNo": 1,
+        "operationKey": "11111111-1111-4111-8111-111111111111:TEST:1",
+        "timeoutSec": 5,
+        "params": {
+          "map_id": "11111111-1111-4111-8111-111111111111",
+          "endpoint_id": "22222222-2222-4222-8222-222222222222",
+          "mode": "NORMAL",
+          "max_speed_mps": 0.05,
+          "endpoint_group_id": "11111111-1111-4111-8111-111111111111"
+        }
+      }
+    }
+  },
+  {
+    "schema": "mqtt-command.schema.json",
+    "name": "reject-speed",
+    "valid": false,
+    "instance": {
+      "protocolVersion": "1.0",
+      "contract": "MAR-STEP-2",
+      "messageType": "COMMAND",
+      "commandId": "11111111-1111-4111-8111-111111111111",
+      "correlationId": "22222222-2222-4222-8222-222222222222",
+      "robotId": "11111111-1111-4111-8111-111111111111",
+      "transportSessionId": "22222222-2222-4222-8222-222222222222",
+      "commandType": "EXECUTE_STEP",
+      "expiresAt": "2026-10-12T00:00:00Z",
+      "step": {
+        "jobId": "11111111-1111-4111-8111-111111111111",
+        "jobStepId": "22222222-2222-4222-8222-222222222222",
+        "stepId": "11111111-1111-4111-8111-111111111111",
+        "stepCode": "TEST",
+        "stepType": "MOVE",
+        "visitNo": 1,
+        "operationKey": "11111111-1111-4111-8111-111111111111:TEST:1",
+        "timeoutSec": 5,
+        "params": {
+          "map_id": "11111111-1111-4111-8111-111111111111",
+          "endpoint_id": "22222222-2222-4222-8222-222222222222",
+          "mode": "NORMAL",
+          "max_speed_mps": 0.31
+        }
+      }
+    }
+  },
+  {
+    "schema": "mqtt-command.schema.json",
+    "name": "reject-speed-string",
+    "valid": false,
+    "instance": {
+      "protocolVersion": "1.0",
+      "contract": "MAR-STEP-2",
+      "messageType": "COMMAND",
+      "commandId": "11111111-1111-4111-8111-111111111111",
+      "correlationId": "22222222-2222-4222-8222-222222222222",
+      "robotId": "11111111-1111-4111-8111-111111111111",
+      "transportSessionId": "22222222-2222-4222-8222-222222222222",
+      "commandType": "EXECUTE_STEP",
+      "expiresAt": "2026-10-12T00:00:00Z",
+      "step": {
+        "jobId": "11111111-1111-4111-8111-111111111111",
+        "jobStepId": "22222222-2222-4222-8222-222222222222",
+        "stepId": "11111111-1111-4111-8111-111111111111",
+        "stepCode": "TEST",
+        "stepType": "MOVE",
+        "visitNo": 1,
+        "operationKey": "11111111-1111-4111-8111-111111111111:TEST:1",
+        "timeoutSec": 5,
+        "params": {
+          "map_id": "11111111-1111-4111-8111-111111111111",
+          "endpoint_id": "22222222-2222-4222-8222-222222222222",
+          "mode": "NORMAL",
+          "max_speed_mps": "0.05"
+        }
+      }
+    }
+  },
+  {
+    "schema": "mqtt-command.schema.json",
+    "name": "reject-uuid",
+    "valid": false,
+    "instance": {
+      "protocolVersion": "1.0",
+      "contract": "MAR-STEP-2",
+      "messageType": "COMMAND",
+      "commandId": "11111111-1111-4111-8111-111111111111",
+      "correlationId": "22222222-2222-4222-8222-222222222222",
+      "robotId": "ROBOT-1",
+      "transportSessionId": "22222222-2222-4222-8222-222222222222",
+      "commandType": "EXECUTE_STEP",
+      "expiresAt": "2026-10-12T00:00:00Z",
+      "step": {
+        "jobId": "11111111-1111-4111-8111-111111111111",
+        "jobStepId": "22222222-2222-4222-8222-222222222222",
+        "stepId": "11111111-1111-4111-8111-111111111111",
+        "stepCode": "TEST",
+        "stepType": "MOVE",
+        "visitNo": 1,
+        "operationKey": "11111111-1111-4111-8111-111111111111:TEST:1",
+        "timeoutSec": 5,
+        "params": {
+          "map_id": "11111111-1111-4111-8111-111111111111",
+          "endpoint_id": "22222222-2222-4222-8222-222222222222",
+          "mode": "NORMAL",
+          "max_speed_mps": 0.05
+        }
+      }
+    }
+  },
+  {
+    "schema": "mqtt-command.schema.json",
+    "name": "reject-date-without-zone",
+    "valid": false,
+    "instance": {
+      "protocolVersion": "1.0",
+      "contract": "MAR-STEP-2",
+      "messageType": "COMMAND",
+      "commandId": "11111111-1111-4111-8111-111111111111",
+      "correlationId": "22222222-2222-4222-8222-222222222222",
+      "robotId": "11111111-1111-4111-8111-111111111111",
+      "transportSessionId": "22222222-2222-4222-8222-222222222222",
+      "commandType": "EXECUTE_STEP",
+      "expiresAt": "2026-10-12T00:00:00",
+      "step": {
+        "jobId": "11111111-1111-4111-8111-111111111111",
+        "jobStepId": "22222222-2222-4222-8222-222222222222",
+        "stepId": "11111111-1111-4111-8111-111111111111",
+        "stepCode": "TEST",
+        "stepType": "MOVE",
+        "visitNo": 1,
+        "operationKey": "11111111-1111-4111-8111-111111111111:TEST:1",
+        "timeoutSec": 5,
+        "params": {
+          "map_id": "11111111-1111-4111-8111-111111111111",
+          "endpoint_id": "22222222-2222-4222-8222-222222222222",
+          "mode": "NORMAL",
+          "max_speed_mps": 0.05
+        }
+      }
+    }
+  },
+  {
+    "schema": "mqtt-command.schema.json",
+    "name": "reject-timeout",
+    "valid": false,
+    "instance": {
+      "protocolVersion": "1.0",
+      "contract": "MAR-STEP-2",
+      "messageType": "COMMAND",
+      "commandId": "11111111-1111-4111-8111-111111111111",
+      "correlationId": "22222222-2222-4222-8222-222222222222",
+      "robotId": "11111111-1111-4111-8111-111111111111",
+      "transportSessionId": "22222222-2222-4222-8222-222222222222",
+      "commandType": "EXECUTE_STEP",
+      "expiresAt": "2026-10-12T00:00:00Z",
+      "step": {
+        "jobId": "11111111-1111-4111-8111-111111111111",
+        "jobStepId": "22222222-2222-4222-8222-222222222222",
+        "stepId": "11111111-1111-4111-8111-111111111111",
+        "stepCode": "TEST",
+        "stepType": "MOVE",
+        "visitNo": 1,
+        "operationKey": "11111111-1111-4111-8111-111111111111:TEST:1",
+        "timeoutSec": 3606,
+        "params": {
+          "map_id": "11111111-1111-4111-8111-111111111111",
+          "endpoint_id": "22222222-2222-4222-8222-222222222222",
+          "mode": "NORMAL",
+          "max_speed_mps": 0.05
+        }
+      }
+    }
+  },
+  {
+    "schema": "mqtt-command.schema.json",
+    "name": "reject-cancel-with-step",
+    "valid": false,
+    "instance": {
+      "protocolVersion": "1.0",
+      "contract": "MAR-STEP-2",
+      "messageType": "COMMAND",
+      "commandId": "11111111-1111-4111-8111-111111111111",
+      "correlationId": "22222222-2222-4222-8222-222222222222",
+      "robotId": "11111111-1111-4111-8111-111111111111",
+      "transportSessionId": "22222222-2222-4222-8222-222222222222",
+      "commandType": "CANCEL_STEP",
+      "expiresAt": "2026-10-12T00:00:00Z",
+      "jobId": "11111111-1111-4111-8111-111111111111",
+      "jobStepId": "22222222-2222-4222-8222-222222222222",
+      "step": {
+        "jobId": "11111111-1111-4111-8111-111111111111",
+        "jobStepId": "22222222-2222-4222-8222-222222222222",
+        "stepId": "11111111-1111-4111-8111-111111111111",
+        "stepCode": "TEST",
+        "stepType": "MOVE",
+        "visitNo": 1,
+        "operationKey": "11111111-1111-4111-8111-111111111111:TEST:1",
+        "timeoutSec": 5,
+        "params": {
+          "map_id": "11111111-1111-4111-8111-111111111111",
+          "endpoint_id": "22222222-2222-4222-8222-222222222222",
+          "mode": "NORMAL",
+          "max_speed_mps": 0.05
+        }
+      }
+    }
+  },
+  {
+    "schema": "mqtt-command.schema.json",
+    "name": "reject-execute-with-top-job",
+    "valid": false,
+    "instance": {
+      "protocolVersion": "1.0",
+      "contract": "MAR-STEP-2",
+      "messageType": "COMMAND",
+      "commandId": "11111111-1111-4111-8111-111111111111",
+      "correlationId": "22222222-2222-4222-8222-222222222222",
+      "robotId": "11111111-1111-4111-8111-111111111111",
+      "transportSessionId": "22222222-2222-4222-8222-222222222222",
+      "commandType": "EXECUTE_STEP",
+      "expiresAt": "2026-10-12T00:00:00Z",
+      "step": {
+        "jobId": "11111111-1111-4111-8111-111111111111",
+        "jobStepId": "22222222-2222-4222-8222-222222222222",
+        "stepId": "11111111-1111-4111-8111-111111111111",
+        "stepCode": "TEST",
+        "stepType": "MOVE",
+        "visitNo": 1,
+        "operationKey": "11111111-1111-4111-8111-111111111111:TEST:1",
+        "timeoutSec": 5,
+        "params": {
+          "map_id": "11111111-1111-4111-8111-111111111111",
+          "endpoint_id": "22222222-2222-4222-8222-222222222222",
+          "mode": "NORMAL",
+          "max_speed_mps": 0.05
+        }
+      },
+      "jobId": "11111111-1111-4111-8111-111111111111"
+    }
+  },
+  {
+    "schema": "mqtt-command.schema.json",
+    "name": "fractional-timeout",
+    "valid": true,
+    "instance": {
+      "protocolVersion": "1.0",
+      "contract": "MAR-STEP-2",
+      "messageType": "COMMAND",
+      "commandId": "11111111-1111-4111-8111-111111111111",
+      "correlationId": "22222222-2222-4222-8222-222222222222",
+      "robotId": "11111111-1111-4111-8111-111111111111",
+      "transportSessionId": "22222222-2222-4222-8222-222222222222",
+      "commandType": "EXECUTE_STEP",
+      "expiresAt": "2026-10-12T00:00:00Z",
+      "step": {
+        "jobId": "11111111-1111-4111-8111-111111111111",
+        "jobStepId": "22222222-2222-4222-8222-222222222222",
+        "stepId": "11111111-1111-4111-8111-111111111111",
+        "stepCode": "TEST",
+        "stepType": "MOVE",
+        "visitNo": 1,
+        "operationKey": "11111111-1111-4111-8111-111111111111:TEST:1",
+        "timeoutSec": 5.5,
+        "params": {
+          "map_id": "11111111-1111-4111-8111-111111111111",
+          "endpoint_id": "22222222-2222-4222-8222-222222222222",
+          "mode": "NORMAL",
+          "max_speed_mps": 0.05
+        }
+      }
+    }
+  },
+  {
+    "schema": "pi-step-inputs.schema.json",
+    "name": "reject-event-on-pi",
+    "valid": false,
+    "instance": {
+      "stepType": "WAIT",
+      "params": {
+        "wait_type": "EVENT",
+        "event_type": "ACK",
+        "correlation_key": "11111111-1111-4111-8111-111111111111"
+      }
+    }
+  },
+  {
+    "schema": "pi-step-inputs.schema.json",
+    "name": "reject-zero-duration",
+    "valid": false,
+    "instance": {
+      "stepType": "WAIT",
+      "params": {
+        "wait_type": "DURATION",
+        "duration_sec": 0
+      }
+    }
+  },
+  {
+    "schema": "pi-step-inputs.schema.json",
+    "name": "reject-health-window",
+    "valid": false,
+    "instance": {
+      "stepType": "EXECUTE_SENSING",
+      "params": {
+        "sensing_type": "ROBOT_HEALTH",
+        "window_sec": 3
+      }
+    }
+  },
+  {
+    "schema": "pi-step-inputs.schema.json",
+    "name": "reject-fall-sensing",
+    "valid": false,
+    "instance": {
+      "stepType": "EXECUTE_SENSING",
+      "params": {
+        "sensing_type": "FALL_DETECTION"
+      }
+    }
+  },
+  {
+    "schema": "pi-step-inputs.schema.json",
+    "name": "reject-hardware-request",
+    "valid": false,
+    "instance": {
+      "stepType": "CONTROL_HARDWARE",
+      "params": {
+        "compartment_id": "CART_MAIN",
+        "action": "LOCK_COMPARTMENT",
+        "service_request_id": "11111111-1111-4111-8111-111111111111"
+      }
+    }
+  },
+  {
+    "schema": "pi-step-inputs.schema.json",
+    "name": "reject-mapping-save-missing-artifact",
+    "valid": false,
+    "instance": {
+      "stepType": "EXECUTE_SENSING",
+      "params": {
+        "sensing_type": "MAPPING",
+        "action": "SAVE",
+        "mapping_session_id": "11111111-1111-4111-8111-111111111111"
+      }
+    }
+  },
+  {
+    "schema": "pi-step-outputs.schema.json",
+    "name": "output-0",
+    "valid": true,
+    "instance": {
+      "stepType": "MOVE",
+      "result": {
+        "reached": true,
+        "endpoint_id": "22222222-2222-4222-8222-222222222222",
+        "action_status": 4,
+        "last_feedback_pose": null,
+        "distance_remaining_m": null,
+        "endpoint_group_id": null,
+        "attempts": [
+          {
+            "endpoint_id": "22222222-2222-4222-8222-222222222222",
+            "phase": "NAVIGATE",
+            "outcome": "REACHED"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "schema": "pi-step-outputs.schema.json",
+    "name": "output-1",
+    "valid": true,
+    "instance": {
+      "stepType": "CONTROL_HARDWARE",
+      "result": {
+        "compartment_id": "CART_MAIN",
+        "action": "LOCK_COMPARTMENT",
+        "published": true,
+        "controller_ack": false,
+        "verified": false,
+        "commanded_state": "LOCK",
+        "position_raw": 1500,
+        "ros_servo_id": 4,
+        "authorization_mode": "DEVICE_COMMAND"
+      }
+    }
+  },
+  {
+    "schema": "pi-step-outputs.schema.json",
+    "name": "output-2",
+    "valid": true,
+    "instance": {
+      "stepType": "CONTROL_HARDWARE",
+      "result": {
+        "compartment_id": "CART_MAIN",
+        "action": "UNLOCK_COMPARTMENT",
+        "published": true,
+        "controller_ack": false,
+        "verified": false,
+        "commanded_state": "UNLOCK",
+        "position_raw": 2400,
+        "ros_servo_id": 4,
+        "authorization_mode": "COMMISSIONING_ONLY"
+      }
+    }
+  },
+  {
+    "schema": "pi-step-outputs.schema.json",
+    "name": "output-3",
+    "valid": true,
+    "instance": {
+      "stepType": "WAIT",
+      "result": {
+        "completed": true,
+        "wake_reason": "DURATION",
+        "elapsed_sec": 2,
+        "event": null
+      }
+    }
+  },
+  {
+    "schema": "pi-step-outputs.schema.json",
+    "name": "output-4",
+    "valid": true,
+    "instance": {
+      "stepType": "EXECUTE_SENSING",
+      "result": {
+        "sensing_type": "ROBOT_HEALTH",
+        "metrics": {
+          "sensors_ready": false,
+          "left_m": null,
+          "right_m": null,
+          "left_fresh": false,
+          "right_fresh": false,
+          "left_age_sec": null,
+          "right_age_sec": null,
+          "battery_age_sec": null,
+          "battery_raw": null,
+          "battery_percent": null,
+          "battery_unit": "UNVERIFIED_UINT16"
+        },
+        "captured_at": "2026-10-12T00:00:00Z",
+        "evidence_ref": null
+      }
+    }
+  },
+  {
+    "schema": "pi-step-outputs.schema.json",
+    "name": "output-5",
+    "valid": true,
+    "instance": {
+      "stepType": "EXECUTE_SENSING",
+      "result": {
+        "sensing_type": "SIDE_CLEARANCE",
+        "metrics": {
+          "sensors_ready": true,
+          "left_m": 1,
+          "right_m": 1,
+          "left_fresh": true,
+          "right_fresh": true,
+          "left_age_sec": null,
+          "right_age_sec": null,
+          "battery_age_sec": null,
+          "battery_raw": null,
+          "battery_percent": null,
+          "battery_unit": "UNVERIFIED_UINT16"
+        },
+        "captured_at": "2026-10-12T00:00:00Z",
+        "evidence_ref": null
+      }
+    }
+  },
+  {
+    "schema": "pi-step-outputs.schema.json",
+    "name": "output-6",
+    "valid": true,
+    "instance": {
+      "stepType": "EXECUTE_SENSING",
+      "result": {
+        "sensing_type": "CROWD_DENSITY",
+        "map_id": "11111111-1111-4111-8111-111111111111",
+        "zone_id": "22222222-2222-4222-8222-222222222222",
+        "model_version": "demo",
+        "captured_at": "2026-10-12T00:00:00Z",
+        "metrics": {
+          "count": 2
+        },
+        "evidence_ref": null
+      }
+    }
+  },
+  {
+    "schema": "pi-step-outputs.schema.json",
+    "name": "output-7",
+    "valid": true,
+    "instance": {
+      "stepType": "EXECUTE_SENSING",
+      "result": {
+        "sensing_type": "RESTRICTED_ZONE",
+        "map_id": "11111111-1111-4111-8111-111111111111",
+        "zone_id": "22222222-2222-4222-8222-222222222222",
+        "model_version": "demo",
+        "captured_at": "2026-10-12T00:00:00Z",
+        "metrics": {
+          "intrusion_detected": false
+        }
+      }
+    }
+  },
+  {
+    "schema": "pi-step-outputs.schema.json",
+    "name": "output-8",
+    "valid": true,
+    "instance": {
+      "stepType": "EXECUTE_SENSING",
+      "result": {
+        "sensing_type": "MAPPING",
+        "mapping_session_id": "11111111-1111-4111-8111-111111111111",
+        "metrics": {
+          "state": "MAPPING",
+          "preview_ready": true
+        },
+        "captured_at": "2026-10-12T00:00:00Z",
+        "evidence_ref": null
+      }
+    }
+  },
+  {
+    "schema": "pi-step-outputs.schema.json",
+    "name": "output-9",
+    "valid": true,
+    "instance": {
+      "stepType": "EXECUTE_SENSING",
+      "result": {
+        "sensing_type": "MAPPING",
+        "mapping_session_id": "11111111-1111-4111-8111-111111111111",
+        "metrics": {
+          "state": "SAVED_LOCAL",
+          "saved_locally": true,
+          "uploaded": false,
+          "artifact_id": "22222222-2222-4222-8222-222222222222",
+          "asset_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "width_px": 20,
+          "height_px": 10,
+          "resolution_m_per_pixel": 0.05,
+          "width_m": 1,
+          "height_m": 0.5,
+          "origin_x_m": 0,
+          "origin_y_m": 0,
+          "origin_yaw_rad": 0,
+          "frame_id": "map"
+        },
+        "captured_at": "2026-10-12T00:00:00Z",
+        "evidence_ref": null
+      }
+    }
+  },
+  {
+    "schema": "pi-step-outputs.schema.json",
+    "name": "output-10",
+    "valid": true,
+    "instance": {
+      "stepType": "EXECUTE_SENSING",
+      "result": {
+        "sensing_type": "MAPPING",
+        "mapping_session_id": "11111111-1111-4111-8111-111111111111",
+        "metrics": {
+          "state": "SAVED",
+          "saved_locally": true,
+          "uploaded": true,
+          "artifact_id": "22222222-2222-4222-8222-222222222222",
+          "asset_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "width_px": 20,
+          "height_px": 10,
+          "resolution_m_per_pixel": 0.05,
+          "width_m": 1,
+          "height_m": 0.5,
+          "origin_x_m": 0,
+          "origin_y_m": 0,
+          "origin_yaw_rad": 0,
+          "frame_id": "map"
+        },
+        "captured_at": "2026-10-12T00:00:00Z",
+        "evidence_ref": null
+      }
+    }
+  },
+  {
+    "schema": "pi-step-outputs.schema.json",
+    "name": "output-11",
+    "valid": true,
+    "instance": {
+      "stepType": "EXECUTE_SENSING",
+      "result": {
+        "sensing_type": "MAPPING",
+        "mapping_session_id": "11111111-1111-4111-8111-111111111111",
+        "metrics": {
+          "state": "SAVED_LOCAL",
+          "stopped": true
+        },
+        "captured_at": "2026-10-12T00:00:00Z",
+        "evidence_ref": null
+      }
+    }
+  },
+  {
+    "schema": "pi-step-outputs.schema.json",
+    "name": "reject-legacy-task-type",
+    "valid": false,
+    "instance": {
+      "stepType": "EXECUTE_SENSING",
+      "result": {
+        "metrics": {
+          "sensors_ready": false,
+          "left_m": null,
+          "right_m": null,
+          "left_fresh": false,
+          "right_fresh": false,
+          "left_age_sec": null,
+          "right_age_sec": null,
+          "battery_age_sec": null,
+          "battery_raw": null,
+          "battery_percent": null,
+          "battery_unit": "UNVERIFIED_UINT16"
+        },
+        "captured_at": "2026-10-12T00:00:00Z",
+        "evidence_ref": null,
+        "task_type": "ROBOT_HEALTH"
+      }
+    }
+  },
+  {
+    "schema": "pi-step-outputs.schema.json",
+    "name": "reject-fake-lock-verification",
+    "valid": false,
+    "instance": {
+      "stepType": "CONTROL_HARDWARE",
+      "result": {
+        "compartment_id": "CART_MAIN",
+        "action": "LOCK_COMPARTMENT",
+        "published": true,
+        "controller_ack": false,
+        "verified": true,
+        "commanded_state": "LOCK",
+        "position_raw": 1500,
+        "ros_servo_id": 4,
+        "authorization_mode": "DEVICE_COMMAND"
+      }
+    }
+  },
+  {
+    "schema": "pi-step-outputs.schema.json",
+    "name": "reject-missing-attempts",
+    "valid": false,
+    "instance": {
+      "stepType": "MOVE",
+      "result": {
+        "reached": true,
+        "endpoint_id": "22222222-2222-4222-8222-222222222222",
+        "action_status": 4,
+        "last_feedback_pose": null,
+        "distance_remaining_m": null,
+        "endpoint_group_id": null
+      }
+    }
+  },
+  {
+    "schema": "pi-step-outputs.schema.json",
+    "name": "reject-mismatched-servo-output",
+    "valid": false,
+    "instance": {
+      "stepType": "CONTROL_HARDWARE",
+      "result": {
+        "compartment_id": "CART_MAIN",
+        "action": "LOCK_COMPARTMENT",
+        "published": true,
+        "controller_ack": false,
+        "verified": false,
+        "commanded_state": "LOCK",
+        "position_raw": 2400,
+        "ros_servo_id": 4,
+        "authorization_mode": "DEVICE_COMMAND"
+      }
+    }
+  },
+  {
+    "schema": "mqtt-be-response.schema.json",
+    "name": "hello-ack",
+    "valid": true,
+    "instance": {
+      "robotId": "11111111-1111-4111-8111-111111111111",
+      "transportSessionId": "22222222-2222-4222-8222-222222222222",
+      "messageType": "HELLO_ACK",
+      "contract": "MAR-STEP-2",
+      "accepted": true
+    }
+  },
+  {
+    "schema": "mqtt-be-response.schema.json",
+    "name": "hello-rejected",
+    "valid": true,
+    "instance": {
+      "robotId": "11111111-1111-4111-8111-111111111111",
+      "transportSessionId": "22222222-2222-4222-8222-222222222222",
+      "messageType": "HELLO_ACK",
+      "contract": "MAR-STEP-2",
+      "accepted": false
+    }
+  },
+  {
+    "schema": "mqtt-be-response.schema.json",
+    "name": "event-ack",
+    "valid": true,
+    "instance": {
+      "robotId": "11111111-1111-4111-8111-111111111111",
+      "transportSessionId": "22222222-2222-4222-8222-222222222222",
+      "messageType": "EVENT_ACK",
+      "messageId": "11111111-1111-4111-8111-111111111111",
+      "accepted": true
+    }
+  },
+  {
+    "schema": "mqtt-be-response.schema.json",
+    "name": "server-heartbeat",
+    "valid": true,
+    "instance": {
+      "robotId": "11111111-1111-4111-8111-111111111111",
+      "transportSessionId": "22222222-2222-4222-8222-222222222222",
+      "messageType": "SERVER_HEARTBEAT"
+    }
+  },
+  {
+    "schema": "mqtt-be-response.schema.json",
+    "name": "reject-wrapped-ack",
+    "valid": false,
+    "instance": {
+      "robotId": "11111111-1111-4111-8111-111111111111",
+      "transportSessionId": "22222222-2222-4222-8222-222222222222",
+      "messageType": "EVENT_ACK",
+      "messageId": "11111111-1111-4111-8111-111111111111",
+      "payload": {
+        "accepted": true
+      }
+    }
+  },
+  {
+    "schema": "mqtt-pi-message.schema.json",
+    "name": "message-0",
+    "valid": true,
+    "instance": {
+      "protocolVersion": "1.0",
+      "messageId": "11111111-1111-4111-8111-111111111111",
+      "operationKey": "11111111-1111-4111-8111-111111111111",
+      "correlationId": "22222222-2222-4222-8222-222222222222",
+      "robotId": "11111111-1111-4111-8111-111111111111",
+      "jobId": null,
+      "jobStepId": null,
+      "occurredAt": "2026-10-12T00:00:00Z",
+      "producerSessionId": "11111111-1111-4111-8111-111111111111",
+      "sequenceNo": 1,
+      "transportSessionId": "22222222-2222-4222-8222-222222222222",
+      "messageType": "HELLO",
+      "payload": {
+        "contract": "MAR-STEP-2",
+        "runtimeVersion": "0.7.0",
+        "simulation": false,
+        "enabledStepTypes": [
+          "MOVE",
+          "WAIT"
+        ],
+        "unlockPolicy": "DISABLED",
+        "mappingEnabled": false,
+        "capabilities": [],
+        "states": [],
+        "mappingSession": null
+      }
+    }
+  },
+  {
+    "schema": "mqtt-pi-message.schema.json",
+    "name": "message-1",
+    "valid": true,
+    "instance": {
+      "protocolVersion": "1.0",
+      "messageId": "11111111-1111-4111-8111-111111111111",
+      "operationKey": "11111111-1111-4111-8111-111111111111",
+      "correlationId": "22222222-2222-4222-8222-222222222222",
+      "robotId": "11111111-1111-4111-8111-111111111111",
+      "jobId": null,
+      "jobStepId": null,
+      "occurredAt": "2026-10-12T00:00:00Z",
+      "producerSessionId": "11111111-1111-4111-8111-111111111111",
+      "sequenceNo": 1,
+      "transportSessionId": "22222222-2222-4222-8222-222222222222",
+      "messageType": "HEARTBEAT",
+      "payload": {
+        "status": "IDLE",
+        "runtimeVersion": "0.7.0",
+        "protocolMajor": 1,
+        "capabilities": [],
+        "activeJobStepId": null,
+        "currentMapId": null,
+        "mapAssetHash": null,
+        "mappingSession": {},
+        "telemetry": {
+          "map_pose": {
+            "value": null,
+            "age_sec": null,
+            "fresh": false
+          }
+        }
+      }
+    }
+  },
+  {
+    "schema": "mqtt-pi-message.schema.json",
+    "name": "message-2",
+    "valid": true,
+    "instance": {
+      "protocolVersion": "1.0",
+      "messageId": "11111111-1111-4111-8111-111111111111",
+      "operationKey": "11111111-1111-4111-8111-111111111111",
+      "correlationId": "22222222-2222-4222-8222-222222222222",
+      "robotId": "11111111-1111-4111-8111-111111111111",
+      "jobId": null,
+      "jobStepId": null,
+      "occurredAt": "2026-10-12T00:00:00Z",
+      "producerSessionId": "11111111-1111-4111-8111-111111111111",
+      "sequenceNo": 1,
+      "transportSessionId": "22222222-2222-4222-8222-222222222222",
+      "messageType": "COMMAND_ACK",
+      "payload": {
+        "commandId": "11111111-1111-4111-8111-111111111111",
+        "commandType": "CANCEL_STEP",
+        "accepted": true,
+        "physicalStopConfirmed": true
+      }
+    }
+  },
+  {
+    "schema": "mqtt-pi-message.schema.json",
+    "name": "message-3",
+    "valid": true,
+    "instance": {
+      "protocolVersion": "1.0",
+      "messageId": "11111111-1111-4111-8111-111111111111",
+      "operationKey": "11111111-1111-4111-8111-111111111111",
+      "correlationId": "22222222-2222-4222-8222-222222222222",
+      "robotId": "11111111-1111-4111-8111-111111111111",
+      "jobId": "11111111-1111-4111-8111-111111111111",
+      "jobStepId": "22222222-2222-4222-8222-222222222222",
+      "occurredAt": "2026-10-12T00:00:00Z",
+      "producerSessionId": "11111111-1111-4111-8111-111111111111",
+      "sequenceNo": 1,
+      "transportSessionId": "22222222-2222-4222-8222-222222222222",
+      "messageType": "COMMAND_ACK",
+      "payload": {
+        "commandId": "11111111-1111-4111-8111-111111111111",
+        "commandType": "EXECUTE_STEP",
+        "accepted": false,
+        "errorCode": "EXPIRED"
+      }
+    }
+  },
+  {
+    "schema": "mqtt-pi-message.schema.json",
+    "name": "message-4",
+    "valid": true,
+    "instance": {
+      "protocolVersion": "1.0",
+      "messageId": "11111111-1111-4111-8111-111111111111",
+      "operationKey": "11111111-1111-4111-8111-111111111111",
+      "correlationId": "22222222-2222-4222-8222-222222222222",
+      "robotId": "11111111-1111-4111-8111-111111111111",
+      "jobId": "11111111-1111-4111-8111-111111111111",
+      "jobStepId": "22222222-2222-4222-8222-222222222222",
+      "occurredAt": "2026-10-12T00:00:00Z",
+      "producerSessionId": "11111111-1111-4111-8111-111111111111",
+      "sequenceNo": 1,
+      "transportSessionId": "22222222-2222-4222-8222-222222222222",
+      "messageType": "COMMAND_ACK",
+      "payload": {
+        "commandId": "11111111-1111-4111-8111-111111111111",
+        "commandType": "EXECUTE_STEP",
+        "accepted": true,
+        "replayed": true,
+        "status": "SUCCEEDED",
+        "result": {
+          "status": "SUCCEEDED",
+          "result": {
+            "reached": true,
+            "endpoint_id": "22222222-2222-4222-8222-222222222222",
+            "action_status": 4,
+            "last_feedback_pose": null,
+            "distance_remaining_m": null,
+            "endpoint_group_id": null,
+            "attempts": [
+              {
+                "endpoint_id": "22222222-2222-4222-8222-222222222222",
+                "phase": "NAVIGATE",
+                "outcome": "REACHED"
+              }
+            ]
+          },
+          "physicalStopConfirmed": true
+        }
+      }
+    }
+  },
+  {
+    "schema": "mqtt-pi-message.schema.json",
+    "name": "message-5",
+    "valid": true,
+    "instance": {
+      "protocolVersion": "1.0",
+      "messageId": "11111111-1111-4111-8111-111111111111",
+      "operationKey": "11111111-1111-4111-8111-111111111111",
+      "correlationId": "22222222-2222-4222-8222-222222222222",
+      "robotId": "11111111-1111-4111-8111-111111111111",
+      "jobId": "11111111-1111-4111-8111-111111111111",
+      "jobStepId": "22222222-2222-4222-8222-222222222222",
+      "occurredAt": "2026-10-12T00:00:00Z",
+      "producerSessionId": "11111111-1111-4111-8111-111111111111",
+      "sequenceNo": 1,
+      "transportSessionId": "22222222-2222-4222-8222-222222222222",
+      "messageType": "STEP_STARTED",
+      "payload": {
+        "attemptNo": 1,
+        "stepType": "WAIT",
+        "resolvedInputs": {
+          "wait_type": "DURATION",
+          "duration_sec": 2
+        }
+      }
+    }
+  },
+  {
+    "schema": "mqtt-pi-message.schema.json",
+    "name": "message-6",
+    "valid": true,
+    "instance": {
+      "protocolVersion": "1.0",
+      "messageId": "11111111-1111-4111-8111-111111111111",
+      "operationKey": "11111111-1111-4111-8111-111111111111",
+      "correlationId": "22222222-2222-4222-8222-222222222222",
+      "robotId": "11111111-1111-4111-8111-111111111111",
+      "jobId": "11111111-1111-4111-8111-111111111111",
+      "jobStepId": "22222222-2222-4222-8222-222222222222",
+      "occurredAt": "2026-10-12T00:00:00Z",
+      "producerSessionId": "11111111-1111-4111-8111-111111111111",
+      "sequenceNo": 1,
+      "transportSessionId": "22222222-2222-4222-8222-222222222222",
+      "messageType": "STEP_RESULT",
+      "payload": {
+        "status": "SUCCEEDED",
+        "result": {
+          "completed": true,
+          "wake_reason": "DURATION",
+          "elapsed_sec": 2,
+          "event": null
+        },
+        "errorCode": null,
+        "retryable": false,
+        "details": null,
+        "physicalStopConfirmed": true
+      }
+    }
+  },
+  {
+    "schema": "mqtt-pi-message.schema.json",
+    "name": "message-7",
+    "valid": true,
+    "instance": {
+      "protocolVersion": "1.0",
+      "messageId": "11111111-1111-4111-8111-111111111111",
+      "operationKey": "11111111-1111-4111-8111-111111111111",
+      "correlationId": "22222222-2222-4222-8222-222222222222",
+      "robotId": "11111111-1111-4111-8111-111111111111",
+      "jobId": "11111111-1111-4111-8111-111111111111",
+      "jobStepId": "22222222-2222-4222-8222-222222222222",
+      "occurredAt": "2026-10-12T00:00:00Z",
+      "producerSessionId": "11111111-1111-4111-8111-111111111111",
+      "sequenceNo": 1,
+      "transportSessionId": "22222222-2222-4222-8222-222222222222",
+      "messageType": "STEP_ERROR",
+      "payload": {
+        "status": "FAILED",
+        "errorCode": "RESTART",
+        "retryable": false,
+        "details": null
+      }
+    }
+  },
+  {
+    "schema": "mqtt-pi-message.schema.json",
+    "name": "message-8",
+    "valid": true,
+    "instance": {
+      "protocolVersion": "1.0",
+      "messageId": "11111111-1111-4111-8111-111111111111",
+      "operationKey": "11111111-1111-4111-8111-111111111111",
+      "correlationId": "22222222-2222-4222-8222-222222222222",
+      "robotId": "11111111-1111-4111-8111-111111111111",
+      "jobId": "11111111-1111-4111-8111-111111111111",
+      "jobStepId": "22222222-2222-4222-8222-222222222222",
+      "occurredAt": "2026-10-12T00:00:00Z",
+      "producerSessionId": "11111111-1111-4111-8111-111111111111",
+      "sequenceNo": 1,
+      "transportSessionId": "22222222-2222-4222-8222-222222222222",
+      "messageType": "STEP_ERROR",
+      "payload": {
+        "status": "TIMED_OUT",
+        "errorCode": "RESTART",
+        "retryable": false,
+        "details": null
+      }
+    }
+  },
+  {
+    "schema": "mqtt-pi-message.schema.json",
+    "name": "message-9",
+    "valid": true,
+    "instance": {
+      "protocolVersion": "1.0",
+      "messageId": "11111111-1111-4111-8111-111111111111",
+      "operationKey": "11111111-1111-4111-8111-111111111111",
+      "correlationId": "22222222-2222-4222-8222-222222222222",
+      "robotId": "11111111-1111-4111-8111-111111111111",
+      "jobId": "11111111-1111-4111-8111-111111111111",
+      "jobStepId": "22222222-2222-4222-8222-222222222222",
+      "occurredAt": "2026-10-12T00:00:00Z",
+      "producerSessionId": "11111111-1111-4111-8111-111111111111",
+      "sequenceNo": 1,
+      "transportSessionId": "22222222-2222-4222-8222-222222222222",
+      "messageType": "STEP_ERROR",
+      "payload": {
+        "status": "CANCELLED",
+        "errorCode": "RESTART",
+        "retryable": false,
+        "details": null
+      }
+    }
+  },
+  {
+    "schema": "mqtt-pi-message.schema.json",
+    "name": "message-10",
+    "valid": true,
+    "instance": {
+      "protocolVersion": "1.0",
+      "messageId": "11111111-1111-4111-8111-111111111111",
+      "operationKey": "11111111-1111-4111-8111-111111111111",
+      "correlationId": "22222222-2222-4222-8222-222222222222",
+      "robotId": "11111111-1111-4111-8111-111111111111",
+      "jobId": "11111111-1111-4111-8111-111111111111",
+      "jobStepId": "22222222-2222-4222-8222-222222222222",
+      "occurredAt": "2026-10-12T00:00:00Z",
+      "producerSessionId": "11111111-1111-4111-8111-111111111111",
+      "sequenceNo": 1,
+      "transportSessionId": "22222222-2222-4222-8222-222222222222",
+      "messageType": "STEP_ERROR",
+      "payload": {
+        "status": "RECOVERY_REQUIRED",
+        "errorCode": "RESTART",
+        "retryable": false,
+        "details": null
+      }
+    }
+  },
+  {
+    "schema": "mqtt-pi-message.schema.json",
+    "name": "message-11",
+    "valid": true,
+    "instance": {
+      "protocolVersion": "1.0",
+      "messageId": "11111111-1111-4111-8111-111111111111",
+      "operationKey": "11111111-1111-4111-8111-111111111111",
+      "correlationId": "22222222-2222-4222-8222-222222222222",
+      "robotId": "11111111-1111-4111-8111-111111111111",
+      "jobId": "11111111-1111-4111-8111-111111111111",
+      "jobStepId": "22222222-2222-4222-8222-222222222222",
+      "occurredAt": "2026-10-12T00:00:00Z",
+      "producerSessionId": "11111111-1111-4111-8111-111111111111",
+      "sequenceNo": 1,
+      "transportSessionId": "22222222-2222-4222-8222-222222222222",
+      "messageType": "OPERATOR_RECONCILED",
+      "payload": {
+        "reason": "checked by operator",
+        "status": "CANCELLED"
+      }
+    }
+  },
+  {
+    "schema": "mqtt-pi-message.schema.json",
+    "name": "message-12",
+    "valid": true,
+    "instance": {
+      "protocolVersion": "1.0",
+      "messageId": "11111111-1111-4111-8111-111111111111",
+      "operationKey": "11111111-1111-4111-8111-111111111111",
+      "correlationId": "22222222-2222-4222-8222-222222222222",
+      "robotId": "11111111-1111-4111-8111-111111111111",
+      "jobId": null,
+      "jobStepId": null,
+      "occurredAt": "2026-10-12T00:00:00Z",
+      "producerSessionId": "11111111-1111-4111-8111-111111111111",
+      "sequenceNo": 1,
+      "transportSessionId": "22222222-2222-4222-8222-222222222222",
+      "messageType": "PROTOCOL_ERROR",
+      "payload": {
+        "commandId": "invalid-command",
+        "errorCode": "INVALID_COMMAND"
+      }
+    }
+  },
+  {
+    "schema": "mqtt-pi-message.schema.json",
+    "name": "message-13",
+    "valid": true,
+    "instance": {
+      "robotId": "11111111-1111-4111-8111-111111111111",
+      "transportSessionId": "22222222-2222-4222-8222-222222222222",
+      "online": false
+    }
+  },
+  {
+    "schema": "mqtt-pi-message.schema.json",
+    "name": "message-14",
+    "valid": true,
+    "instance": {
+      "robotId": "11111111-1111-4111-8111-111111111111",
+      "transportSessionId": "22222222-2222-4222-8222-222222222222",
+      "messageType": "MAP_PREVIEW",
+      "payload": {
+        "mapping_session_id": "11111111-1111-4111-8111-111111111111",
+        "revision": 1,
+        "width": 2,
+        "height": 2,
+        "resolution": 0.05,
+        "origin": [
+          0,
+          0,
+          0
+        ],
+        "frame_id": "map",
+        "captured_at": "2026-10-12T00:00:00Z",
+        "pose": {
+          "value": null,
+          "age_sec": null,
+          "fresh": false
+        },
+        "encoding": "zlib-base64-int8-row-major-bottom-up",
+        "data": "eJwDAAAAAAE="
+      }
+    }
+  },
+  {
+    "schema": "mqtt-pi-message.schema.json",
+    "name": "reject-started-without-job",
+    "valid": false,
+    "instance": {
+      "protocolVersion": "1.0",
+      "messageId": "11111111-1111-4111-8111-111111111111",
+      "operationKey": "11111111-1111-4111-8111-111111111111",
+      "correlationId": "22222222-2222-4222-8222-222222222222",
+      "robotId": "11111111-1111-4111-8111-111111111111",
+      "jobId": null,
+      "jobStepId": "22222222-2222-4222-8222-222222222222",
+      "occurredAt": "2026-10-12T00:00:00Z",
+      "producerSessionId": "11111111-1111-4111-8111-111111111111",
+      "sequenceNo": 1,
+      "transportSessionId": "22222222-2222-4222-8222-222222222222",
+      "messageType": "STEP_STARTED",
+      "payload": {
+        "attemptNo": 1,
+        "stepType": "WAIT",
+        "resolvedInputs": {
+          "wait_type": "DURATION",
+          "duration_sec": 2
+        }
+      }
+    }
+  },
+  {
+    "schema": "mqtt-pi-message.schema.json",
+    "name": "reject-failure-as-result",
+    "valid": false,
+    "instance": {
+      "protocolVersion": "1.0",
+      "messageId": "11111111-1111-4111-8111-111111111111",
+      "operationKey": "11111111-1111-4111-8111-111111111111",
+      "correlationId": "22222222-2222-4222-8222-222222222222",
+      "robotId": "11111111-1111-4111-8111-111111111111",
+      "jobId": "11111111-1111-4111-8111-111111111111",
+      "jobStepId": "22222222-2222-4222-8222-222222222222",
+      "occurredAt": "2026-10-12T00:00:00Z",
+      "producerSessionId": "11111111-1111-4111-8111-111111111111",
+      "sequenceNo": 1,
+      "transportSessionId": "22222222-2222-4222-8222-222222222222",
+      "messageType": "STEP_RESULT",
+      "payload": {
+        "status": "FAILED",
+        "result": {
+          "completed": true,
+          "wake_reason": "DURATION",
+          "elapsed_sec": 2,
+          "event": null
+        },
+        "errorCode": null,
+        "retryable": false,
+        "details": null,
+        "physicalStopConfirmed": true
+      }
+    }
+  },
+  {
+    "schema": "mqtt-pi-message.schema.json",
+    "name": "reject-result-no-stop",
+    "valid": false,
+    "instance": {
+      "protocolVersion": "1.0",
+      "messageId": "11111111-1111-4111-8111-111111111111",
+      "operationKey": "11111111-1111-4111-8111-111111111111",
+      "correlationId": "22222222-2222-4222-8222-222222222222",
+      "robotId": "11111111-1111-4111-8111-111111111111",
+      "jobId": "11111111-1111-4111-8111-111111111111",
+      "jobStepId": "22222222-2222-4222-8222-222222222222",
+      "occurredAt": "2026-10-12T00:00:00Z",
+      "producerSessionId": "11111111-1111-4111-8111-111111111111",
+      "sequenceNo": 1,
+      "transportSessionId": "22222222-2222-4222-8222-222222222222",
+      "messageType": "STEP_RESULT",
+      "payload": {
+        "status": "SUCCEEDED",
+        "result": {
+          "completed": true,
+          "wake_reason": "DURATION",
+          "elapsed_sec": 2,
+          "event": null
+        },
+        "errorCode": null,
+        "retryable": false,
+        "details": null
+      }
+    }
+  },
+  {
+    "schema": "mqtt-pi-message.schema.json",
+    "name": "reject-hello-staff-verified-not-implemented",
+    "valid": false,
+    "instance": {
+      "protocolVersion": "1.0",
+      "messageId": "11111111-1111-4111-8111-111111111111",
+      "operationKey": "11111111-1111-4111-8111-111111111111",
+      "correlationId": "22222222-2222-4222-8222-222222222222",
+      "robotId": "11111111-1111-4111-8111-111111111111",
+      "jobId": null,
+      "jobStepId": null,
+      "occurredAt": "2026-10-12T00:00:00Z",
+      "producerSessionId": "11111111-1111-4111-8111-111111111111",
+      "sequenceNo": 1,
+      "transportSessionId": "22222222-2222-4222-8222-222222222222",
+      "messageType": "HELLO",
+      "payload": {
+        "contract": "MAR-STEP-2",
+        "runtimeVersion": "0.7.0",
+        "simulation": false,
+        "enabledStepTypes": [
+          "MOVE",
+          "WAIT"
+        ],
+        "unlockPolicy": "STAFF_VERIFIED",
+        "mappingEnabled": false,
+        "capabilities": [],
+        "states": [],
+        "mappingSession": null
+      }
+    }
+  },
+  {
+    "schema": "mapping-artifact.schema.json",
+    "name": "manifest",
+    "valid": true,
+    "instance": {
+      "artifact_id": "22222222-2222-4222-8222-222222222222",
+      "asset_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "width_px": 20,
+      "height_px": 10,
+      "resolution_m_per_pixel": 0.05,
+      "width_m": 1,
+      "height_m": 0.5,
+      "origin_x_m": 0,
+      "origin_y_m": 0,
+      "origin_yaw_rad": 0,
+      "frame_id": "map"
+    }
+  },
+  {
+    "schema": "mapping-artifact.schema.json",
+    "name": "upload-receipt",
+    "valid": true,
+    "instance": {
+      "stored": true,
+      "artifactId": "22222222-2222-4222-8222-222222222222",
+      "assetHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+  },
+  {
+    "schema": "mapping-artifact.schema.json",
+    "name": "reject-unverified-receipt",
+    "valid": false,
+    "instance": {
+      "stored": false,
+      "artifactId": "22222222-2222-4222-8222-222222222222",
+      "assetHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+  },
+  {
+    "schema": "staff-step-response.schema.json",
+    "name": "callback-PAYLOAD_CONFIRMED",
+    "valid": true,
+    "instance": {
+      "responseType": "PAYLOAD_CONFIRMED",
+      "data": {
+        "confirmed": true,
+        "items": [
+          {
+            "item_code": "MED-1",
+            "quantity": 1
+          }
+        ]
+      }
+    }
+  },
+  {
+    "schema": "staff-step-response.schema.json",
+    "name": "callback-DOOR_CLOSED",
+    "valid": true,
+    "instance": {
+      "responseType": "DOOR_CLOSED",
+      "data": {
+        "closed": false
+      }
+    }
+  },
+  {
+    "schema": "staff-step-response.schema.json",
+    "name": "callback-LOCK_CHECKED",
+    "valid": true,
+    "instance": {
+      "responseType": "LOCK_CHECKED",
+      "data": {
+        "locked": true
+      }
+    }
+  },
+  {
+    "schema": "staff-step-response.schema.json",
+    "name": "callback-INTERACTION_CONFIRMED",
+    "valid": true,
+    "instance": {
+      "responseType": "INTERACTION_CONFIRMED",
+      "data": {
+        "confirmed": false,
+        "values": {}
+      }
+    }
+  },
+  {
+    "schema": "staff-step-response.schema.json",
+    "name": "callback-UI_DISPLAYED",
+    "valid": true,
+    "instance": {
+      "responseType": "UI_DISPLAYED",
+      "data": {
+        "prompt_key": "WELCOME"
+      }
+    }
+  },
+  {
+    "schema": "staff-step-response.schema.json",
+    "name": "reject-client-actor",
+    "valid": false,
+    "instance": {
+      "responseType": "DOOR_CLOSED",
+      "data": {
+        "closed": true
+      },
+      "actor_account_id": "11111111-1111-4111-8111-111111111111"
+    }
+  },
+  {
+    "schema": "staff-step-response.schema.json",
+    "name": "reject-client-auth",
+    "valid": false,
+    "instance": {
+      "responseType": "AUTHENTICATED",
+      "data": {
+        "verified": true
+      }
+    }
+  },
+  {
+    "schema": "be-step-contracts.json",
+    "name": "be-INTERACT-94",
+    "valid": true,
+    "instance": {
+      "stepType": "INTERACT",
+      "input": {
+        "prompt_key": "WELCOME",
+        "action": "DISPLAY",
+        "data": {}
+      },
+      "output": {
+        "completed": true,
+        "prompt_key": "WELCOME",
+        "action": "DISPLAY",
+        "source": "UI",
+        "actor_account_id": null,
+        "completed_at": "2026-10-12T00:00:00Z"
+      }
+    }
+  },
+  {
+    "schema": "be-step-contracts.json",
+    "name": "be-INTERACT-95",
+    "valid": true,
+    "instance": {
+      "stepType": "INTERACT",
+      "input": {
+        "prompt_key": "CLOSE_SENDER",
+        "action": "CONFIRM",
+        "data": {
+          "compartment_id": "CART_MAIN"
+        }
+      },
+      "output": {
+        "completed": true,
+        "prompt_key": "CLOSE_SENDER",
+        "action": "CONFIRM",
+        "confirmed": true,
+        "closed": true,
+        "source": "STAFF_MANUAL",
+        "actor_account_id": "11111111-1111-4111-8111-111111111111",
+        "completed_at": "2026-10-12T00:00:00Z"
+      }
+    }
+  },
+  {
+    "schema": "be-step-contracts.json",
+    "name": "be-INTERACT-96",
+    "valid": true,
+    "instance": {
+      "stepType": "INTERACT",
+      "input": {
+        "prompt_key": "VERIFY_RECEIVER",
+        "action": "CONFIRM",
+        "data": {}
+      },
+      "output": {
+        "completed": true,
+        "prompt_key": "VERIFY_RECEIVER",
+        "action": "CONFIRM",
+        "confirmed": false,
+        "locked": false,
+        "source": "STAFF_MANUAL",
+        "actor_account_id": "11111111-1111-4111-8111-111111111111",
+        "completed_at": "2026-10-12T00:00:00Z"
+      }
+    }
+  },
+  {
+    "schema": "be-step-contracts.json",
+    "name": "be-DATA_SERVICE-97",
+    "valid": true,
+    "instance": {
+      "stepType": "DATA_SERVICE",
+      "input": {
+        "service_key": "QUERY_HOSPITAL_INFORMATION",
+        "question": "Giờ thăm bệnh?",
+        "language_code": "vi-VN"
+      },
+      "output": {
+        "request_id": "11111111-1111-4111-8111-111111111111:QUERY:1",
+        "data": {
+          "found": false,
+          "answer": "Vui lòng liên hệ nhân viên.",
+          "language_code": "vi-VN",
+          "items": [],
+          "count": 0,
+          "source": null,
+          "fallback_code": "INFORMATION_UNAVAILABLE"
+        }
+      }
+    }
+  },
+  {
+    "schema": "be-step-contracts.json",
+    "name": "be-DATA_SERVICE-98",
+    "valid": true,
+    "instance": {
+      "stepType": "DATA_SERVICE",
+      "input": {
+        "service_key": "QUERY_HOSPITAL_INFORMATION",
+        "question": "Giờ thăm bệnh?"
+      },
+      "output": {
+        "request_id": "11111111-1111-4111-8111-111111111111:QUERY:1",
+        "data": {
+          "found": true,
+          "answer": "Từ 14 giờ.",
+          "language_code": "vi-VN",
+          "items": [
+            {
+              "id": "11111111-1111-4111-8111-111111111111",
+              "category": "GENERAL",
+              "title": "Giờ thăm",
+              "content": "Từ 14 giờ.",
+              "languageCode": "vi-VN"
+            }
+          ],
+          "count": 1,
+          "source": {
+            "article_id": "11111111-1111-4111-8111-111111111111",
+            "article_code": "INFO01",
+            "category": "GENERAL",
+            "title": "Giờ thăm",
+            "language_code": "vi-VN",
+            "updated_at": "2026-10-12T00:00:00Z"
+          }
+        }
+      }
+    }
+  },
+  {
+    "schema": "be-step-contracts.json",
+    "name": "be-DATA_SERVICE-99",
+    "valid": true,
+    "instance": {
+      "stepType": "DATA_SERVICE",
+      "input": {
+        "service_key": "RESOLVE_TARGETS",
+        "endpoint_group_id": "11111111-1111-4111-8111-111111111111"
+      },
+      "output": {
+        "request_id": "11111111-1111-4111-8111-111111111111:QUERY:1",
+        "data": {
+          "targets": [
+            {
+              "endpoint_id": "11111111-1111-4111-8111-111111111111",
+              "endpoint_code": "E01",
+              "endpoint_name": "Demo",
+              "x_m": 1,
+              "y_m": 2,
+              "yaw_rad": 0
+            }
+          ]
+        }
+      }
+    }
+  },
+  {
+    "schema": "be-step-contracts.json",
+    "name": "be-DATA_SERVICE-100",
+    "valid": true,
+    "instance": {
+      "stepType": "DATA_SERVICE",
+      "input": {
+        "service_key": "SELECT_TARGET",
+        "targets": [
+          {
+            "endpoint_id": "11111111-1111-4111-8111-111111111111",
+            "endpoint_code": "E01",
+            "endpoint_name": "Demo",
+            "x_m": 1,
+            "y_m": 2,
+            "yaw_rad": 0
+          }
+        ],
+        "index": 0
+      },
+      "output": {
+        "request_id": "11111111-1111-4111-8111-111111111111:QUERY:1",
+        "data": {
+          "has_target": true,
+          "target": {
+            "endpoint_id": "11111111-1111-4111-8111-111111111111",
+            "endpoint_code": "E01",
+            "endpoint_name": "Demo",
+            "x_m": 1,
+            "y_m": 2,
+            "yaw_rad": 0
+          },
+          "endpoint_id": "11111111-1111-4111-8111-111111111111"
+        }
+      }
+    }
+  },
+  {
+    "schema": "be-step-contracts.json",
+    "name": "be-DATA_SERVICE-101",
+    "valid": true,
+    "instance": {
+      "stepType": "DATA_SERVICE",
+      "input": {
+        "service_key": "SELECT_TARGET",
+        "targets": [],
+        "index": 0
+      },
+      "output": {
+        "request_id": "11111111-1111-4111-8111-111111111111:QUERY:1",
+        "data": {
+          "has_target": false
+        }
+      }
+    }
+  },
+  {
+    "schema": "be-step-contracts.json",
+    "name": "be-DATA_SERVICE-102",
+    "valid": true,
+    "instance": {
+      "stepType": "DATA_SERVICE",
+      "input": {
+        "service_key": "CHECK_TARGET",
+        "endpoint_id": "11111111-1111-4111-8111-111111111111"
+      },
+      "output": {
+        "request_id": "11111111-1111-4111-8111-111111111111:QUERY:1",
+        "data": {
+          "is_valid": true,
+          "endpoint": {
+            "endpoint_id": "11111111-1111-4111-8111-111111111111",
+            "endpoint_code": "E01",
+            "endpoint_name": "Demo",
+            "x_m": 1,
+            "y_m": 2,
+            "yaw_rad": 0
+          }
+        }
+      }
+    }
+  },
+  {
+    "schema": "be-step-contracts.json",
+    "name": "be-DATA_SERVICE-103",
+    "valid": true,
+    "instance": {
+      "stepType": "DATA_SERVICE",
+      "input": {
+        "service_key": "CHECK_TARGET",
+        "endpoint_id": "11111111-1111-4111-8111-111111111111"
+      },
+      "output": {
+        "request_id": "11111111-1111-4111-8111-111111111111:QUERY:1",
+        "data": {
+          "is_valid": false
+        }
+      }
+    }
+  },
+  {
+    "schema": "be-step-contracts.json",
+    "name": "be-DATA_SERVICE-104",
+    "valid": true,
+    "instance": {
+      "stepType": "DATA_SERVICE",
+      "input": {
+        "service_key": "CREATE_FALL_INCIDENT",
+        "detection_event_id": "11111111-1111-4111-8111-111111111111"
+      },
+      "output": {
+        "request_id": "11111111-1111-4111-8111-111111111111:QUERY:1",
+        "data": {
+          "incident_id": "22222222-2222-4222-8222-222222222222",
+          "created": true
+        }
+      }
+    }
+  },
+  {
+    "schema": "be-step-contracts.json",
+    "name": "be-DATA_SERVICE-105",
+    "valid": true,
+    "instance": {
+      "stepType": "DATA_SERVICE",
+      "input": {
+        "service_key": "COMMIT_MAP_ARTIFACT",
+        "mapping_session_id": "11111111-1111-4111-8111-111111111111",
+        "artifact_id": "22222222-2222-4222-8222-222222222222",
+        "floor_id": "11111111-1111-4111-8111-111111111111",
+        "map_name": "Demo"
+      },
+      "output": {
+        "request_id": "11111111-1111-4111-8111-111111111111:QUERY:1",
+        "data": {
+          "map_id": "11111111-1111-4111-8111-111111111111",
+          "artifact_id": "22222222-2222-4222-8222-222222222222",
+          "asset_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "created": true
+        }
+      }
+    }
+  },
+  {
+    "schema": "be-step-contracts.json",
+    "name": "be-AUTHENTICATE-106",
+    "valid": true,
+    "instance": {
+      "stepType": "AUTHENTICATE",
+      "input": {
+        "purpose": "DELIVERY_SENDER",
+        "service_request_id": "11111111-1111-4111-8111-111111111111"
+      },
+      "output": {
+        "verified": true,
+        "verification_id": "22222222-2222-4222-8222-222222222222",
+        "actor_account_id": "11111111-1111-4111-8111-111111111111",
+        "purpose": "DELIVERY_SENDER",
+        "service_request_id": "11111111-1111-4111-8111-111111111111",
+        "verified_at": "2026-10-12T00:00:00Z",
+        "valid_until": "2026-10-12T00:05:00Z"
+      }
+    }
+  },
+  {
+    "schema": "be-step-contracts.json",
+    "name": "be-AUTHENTICATE-107",
+    "valid": true,
+    "instance": {
+      "stepType": "AUTHENTICATE",
+      "input": {
+        "purpose": "DELIVERY_RECEIVER",
+        "service_request_id": "11111111-1111-4111-8111-111111111111"
+      },
+      "output": {
+        "verified": false,
+        "verification_id": null,
+        "actor_account_id": null,
+        "purpose": "DELIVERY_RECEIVER",
+        "service_request_id": "11111111-1111-4111-8111-111111111111",
+        "verified_at": null,
+        "valid_until": null
+      }
+    }
+  },
+  {
+    "schema": "be-step-contracts.json",
+    "name": "be-HANDLE_PAYLOAD-108",
+    "valid": true,
+    "instance": {
+      "stepType": "HANDLE_PAYLOAD",
+      "input": {
+        "action": "LOAD",
+        "service_request_id": "11111111-1111-4111-8111-111111111111",
+        "compartment_id": "CART_MAIN",
+        "items": [
+          {
+            "item_code": "MED-1",
+            "quantity": 1
+          }
+        ]
+      },
+      "output": {
+        "confirmed": true,
+        "action": "LOAD",
+        "service_request_id": "11111111-1111-4111-8111-111111111111",
+        "compartment_id": "CART_MAIN",
+        "items": [
+          {
+            "item_code": "MED-1",
+            "quantity": 1
+          }
+        ],
+        "actor_account_id": "22222222-2222-4222-8222-222222222222",
+        "confirmed_at": "2026-10-12T00:00:00Z",
+        "source": "STAFF_MANUAL"
+      }
+    }
+  },
+  {
+    "schema": "be-step-contracts.json",
+    "name": "be-HANDLE_PAYLOAD-109",
+    "valid": true,
+    "instance": {
+      "stepType": "HANDLE_PAYLOAD",
+      "input": {
+        "action": "UNLOAD",
+        "service_request_id": "11111111-1111-4111-8111-111111111111",
+        "compartment_id": "CART_MAIN",
+        "items": [
+          {
+            "item_code": "MED-1",
+            "quantity": 1
+          }
+        ]
+      }
+    }
+  },
+  {
+    "schema": "be-step-contracts.json",
+    "name": "be-NOTIFY-110",
+    "valid": true,
+    "instance": {
+      "stepType": "NOTIFY",
+      "input": {
+        "notification_type": "DELIVERY_READY",
+        "severity": "INFO",
+        "data": {},
+        "require_ack": true
+      },
+      "output": {
+        "alert_id": "11111111-1111-4111-8111-111111111111",
+        "notification_type": "DELIVERY_READY",
+        "persisted": true,
+        "requires_ack": true
+      }
+    }
+  },
+  {
+    "schema": "be-step-contracts.json",
+    "name": "be-WAIT-111",
+    "valid": true,
+    "instance": {
+      "stepType": "WAIT",
+      "input": {
+        "wait_type": "EVENT",
+        "event_type": "ALERT_ACKNOWLEDGED",
+        "correlation_key": "11111111-1111-4111-8111-111111111111"
+      },
+      "output": {
+        "completed": true,
+        "wake_reason": "EVENT",
+        "elapsed_sec": 3,
+        "event": {
+          "event_type": "ALERT_ACKNOWLEDGED",
+          "correlation_key": "11111111-1111-4111-8111-111111111111",
+          "occurred_at": "2026-10-12T00:00:00Z",
+          "data": {}
+        }
+      }
+    }
+  },
+  {
+    "schema": "be-step-contracts.json",
+    "name": "be-CHECK_CONDITION-112",
+    "valid": true,
+    "instance": {
+      "stepType": "CHECK_CONDITION",
+      "input": {
+        "expression": {
+          "path": "/outputs/HEALTH/metrics/sensors_ready",
+          "operator": "EQ",
+          "value": true
+        }
+      },
+      "output": {
+        "value": false
+      }
+    }
+  },
+  {
+    "schema": "be-step-contracts.json",
+    "name": "be-CHECK_CONDITION-113",
+    "valid": true,
+    "instance": {
+      "stepType": "CHECK_CONDITION",
+      "input": {
+        "expression": {
+          "path": "/vars/loops",
+          "operator": "EXISTS"
+        }
+      },
+      "output": {
+        "value": true
+      }
+    }
+  },
+  {
+    "schema": "be-step-contracts.json",
+    "name": "be-CHECK_CONDITION-114",
+    "valid": true,
+    "instance": {
+      "stepType": "CHECK_CONDITION",
+      "input": {
+        "expression": {
+          "path": "/vars/name",
+          "operator": "IN",
+          "value": [
+            "a",
+            "b"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "schema": "be-step-contracts.json",
+    "name": "be-SET_CONTEXT-115",
+    "valid": true,
+    "instance": {
+      "stepType": "SET_CONTEXT",
+      "input": {
+        "operations": [
+          {
+            "path": "/vars/loops",
+            "value": 0
+          }
+        ]
+      },
+      "output": {
+        "updated": {
+          "loops": 0
+        }
+      }
+    }
+  },
+  {
+    "schema": "be-step-contracts.json",
+    "name": "be-SET_CONTEXT-116",
+    "valid": true,
+    "instance": {
+      "stepType": "SET_CONTEXT",
+      "input": {
+        "operations": [
+          {
+            "path": "/vars/loops",
+            "operation": "INCREMENT",
+            "value": 1
+          }
+        ]
+      },
+      "output": {
+        "updated": {
+          "loops": 1
+        }
+      }
+    }
+  },
+  {
+    "schema": "be-step-contracts.json",
+    "name": "reject-legacy-context-result",
+    "valid": false,
+    "instance": {
+      "stepType": "SET_CONTEXT",
+      "input": {
+        "operations": [
+          {
+            "path": "/vars/loops",
+            "value": 0
+          }
+        ]
+      },
+      "output": {
+        "changed_keys": [
+          "loops"
+        ],
+        "values": {
+          "loops": 0
+        }
+      }
+    }
+  },
+  {
+    "schema": "be-step-contracts.json",
+    "name": "reject-reserved-context-write",
+    "valid": false,
+    "instance": {
+      "stepType": "SET_CONTEXT",
+      "input": {
+        "operations": [
+          {
+            "path": "/inputs/map_id",
+            "value": 0
+          }
+        ]
+      },
+      "output": {
+        "updated": {
+          "loops": 0
+        }
+      }
+    }
+  },
+  {
+    "schema": "be-step-contracts.json",
+    "name": "reject-missing-set-value",
+    "valid": false,
+    "instance": {
+      "stepType": "SET_CONTEXT",
+      "input": {
+        "operations": [
+          {
+            "path": "/vars/loops"
+          }
+        ]
+      },
+      "output": {
+        "updated": {
+          "loops": 0
+        }
+      }
+    }
+  },
+  {
+    "schema": "be-step-contracts.json",
+    "name": "reject-increment-string",
+    "valid": false,
+    "instance": {
+      "stepType": "SET_CONTEXT",
+      "input": {
+        "operations": [
+          {
+            "path": "/vars/loops",
+            "operation": "INCREMENT",
+            "value": "1"
+          }
+        ]
+      },
+      "output": {
+        "updated": {
+          "loops": 0
+        }
+      }
+    }
+  },
+  {
+    "schema": "be-step-contracts.json",
+    "name": "reject-fake-auth-success",
+    "valid": false,
+    "instance": {
+      "stepType": "AUTHENTICATE",
+      "input": {
+        "purpose": "DELIVERY_SENDER",
+        "service_request_id": "11111111-1111-4111-8111-111111111111"
+      },
+      "output": {
+        "verified": true,
+        "verification_id": null,
+        "actor_account_id": "11111111-1111-4111-8111-111111111111",
+        "purpose": "DELIVERY_SENDER",
+        "service_request_id": "11111111-1111-4111-8111-111111111111",
+        "verified_at": "2026-10-12T00:00:00Z",
+        "valid_until": "2026-10-12T00:00:00Z"
+      }
+    }
+  },
+  {
+    "schema": "be-step-contracts.json",
+    "name": "reject-fake-notify-delivery",
+    "valid": false,
+    "instance": {
+      "stepType": "NOTIFY",
+      "input": {
+        "notification_type": "DELIVERY_READY",
+        "severity": "INFO",
+        "data": {},
+        "require_ack": true
+      },
+      "output": {
+        "notification_id": "11111111-1111-4111-8111-111111111111",
+        "delivered": true,
+        "acked": true
+      }
+    }
+  },
+  {
+    "schema": "be-step-contracts.json",
+    "name": "reject-condition-no-value",
+    "valid": false,
+    "instance": {
+      "stepType": "CHECK_CONDITION",
+      "input": {
+        "expression": {
+          "path": "/outputs/HEALTH/metrics/sensors_ready",
+          "operator": "EQ"
+        }
+      },
+      "output": {
+        "value": false
+      }
+    }
+  },
+  {
+    "schema": "be-step-contracts.json",
+    "name": "reject-condition-eval",
+    "valid": false,
+    "instance": {
+      "stepType": "CHECK_CONDITION",
+      "input": {
+        "expression": {
+          "path": "/outputs/HEALTH/metrics/sensors_ready",
+          "operator": "EVAL",
+          "value": true
+        }
+      },
+      "output": {
+        "value": false
+      }
+    }
+  },
+  {
+    "schema": "be-step-contracts.json",
+    "name": "reject-interact-pending-success",
+    "valid": false,
+    "instance": {
+      "stepType": "INTERACT",
+      "input": {
+        "prompt_key": "WELCOME",
+        "action": "DISPLAY",
+        "data": {}
+      },
+      "output": {
+        "completed": false,
+        "prompt_key": "WELCOME",
+        "action": "DISPLAY",
+        "source": "UI",
+        "actor_account_id": null,
+        "completed_at": "2026-10-12T00:00:00Z"
+      }
+    }
+  },
+  {
+    "schema": "be-step-contracts.json",
+    "name": "reject-payload-no-items",
+    "valid": false,
+    "instance": {
+      "stepType": "HANDLE_PAYLOAD",
+      "input": {
+        "action": "LOAD",
+        "service_request_id": "11111111-1111-4111-8111-111111111111",
+        "compartment_id": "CART_MAIN",
+        "items": []
+      },
+      "output": {
+        "confirmed": true,
+        "action": "LOAD",
+        "service_request_id": "11111111-1111-4111-8111-111111111111",
+        "compartment_id": "CART_MAIN",
+        "items": [
+          {
+            "item_code": "MED-1",
+            "quantity": 1
+          }
+        ],
+        "actor_account_id": "22222222-2222-4222-8222-222222222222",
+        "confirmed_at": "2026-10-12T00:00:00Z",
+        "source": "STAFF_MANUAL"
+      }
+    }
+  },
+  {
+    "schema": "be-step-contracts.json",
+    "name": "reject-selected-target-missing-endpoint",
+    "valid": false,
+    "instance": {
+      "stepType": "DATA_SERVICE",
+      "input": {
+        "service_key": "SELECT_TARGET",
+        "targets": [
+          {
+            "endpoint_id": "11111111-1111-4111-8111-111111111111",
+            "endpoint_code": "E01",
+            "endpoint_name": "Demo",
+            "x_m": 1,
+            "y_m": 2,
+            "yaw_rad": 0
+          }
+        ],
+        "index": 0
+      },
+      "output": {
+        "request_id": "11111111-1111-4111-8111-111111111111:QUERY:1",
+        "data": {
+          "has_target": true,
+          "target": {
+            "endpoint_id": "11111111-1111-4111-8111-111111111111",
+            "endpoint_code": "E01",
+            "endpoint_name": "Demo",
+            "x_m": 1,
+            "y_m": 2,
+            "yaw_rad": 0
+          }
+        }
+      }
+    }
+  },
+  {
+    "schema": "be-step-contracts.json",
+    "name": "reject-service-url",
+    "valid": false,
+    "instance": {
+      "stepType": "DATA_SERVICE",
+      "input": {
+        "service_key": "SELECT_TARGET",
+        "targets": [
+          {
+            "endpoint_id": "11111111-1111-4111-8111-111111111111",
+            "endpoint_code": "E01",
+            "endpoint_name": "Demo",
+            "x_m": 1,
+            "y_m": 2,
+            "yaw_rad": 0
+          }
+        ],
+        "index": 0,
+        "url": "https://example.invalid"
+      },
+      "output": {
+        "request_id": "11111111-1111-4111-8111-111111111111:QUERY:1",
+        "data": {
+          "has_target": true,
+          "target": {
+            "endpoint_id": "11111111-1111-4111-8111-111111111111",
+            "endpoint_code": "E01",
+            "endpoint_name": "Demo",
+            "x_m": 1,
+            "y_m": 2,
+            "yaw_rad": 0
+          },
+          "endpoint_id": "11111111-1111-4111-8111-111111111111"
+        }
+      }
+    }
+  },
+  {
+    "schema": "be-step-contracts.json",
+    "name": "notify-be-policy-selectors",
+    "valid": true,
+    "instance": {
+      "stepType": "NOTIFY",
+      "input": {
+        "notification_type": "STAFF_REVIEW",
+        "severity": "WARNING",
+        "data": {},
+        "require_ack": true,
+        "ack_policy": "ALL",
+        "recipients": [
+          "STAFF",
+          "11111111-1111-4111-8111-111111111111"
+        ]
+      }
+    }
+  },
+  {
+    "schema": "be-step-contracts.json",
+    "name": "notify-invalid-recipient-selector",
+    "valid": false,
+    "instance": {
+      "stepType": "NOTIFY",
+      "input": {
+        "notification_type": "STAFF_REVIEW",
+        "severity": "WARNING",
+        "data": {},
+        "require_ack": true,
+        "ack_policy": "ALL",
+        "recipients": [
+          "not-an-account-or-role"
+        ]
+      }
+    }
+  }
+]

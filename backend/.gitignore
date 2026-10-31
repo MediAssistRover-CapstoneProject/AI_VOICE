@@ -1,0 +1,12 @@
+target/
+.idea/
+.vscode/
+.playwright-cli/
+*.iml
+*.log
+.env
+secrets/
+data/map-artifacts/
+data/speech/
+.DS_Store
+Thumbs.db

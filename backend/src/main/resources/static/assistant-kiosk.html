@@ -1,0 +1,458 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>MediAssist — Trợ lý bệnh viện</title>
+    <link rel="icon" href="/favicon.svg" />
+    <link rel="stylesheet" href="/assistant.css" />
+  </head>
+  <body>
+    <header>
+      <div class="brand">
+        <div class="logo">+</div>
+        <div>
+          <h1>MediAssist Rover</h1>
+          <p>Trợ lý thông tin & chỉ đường</p>
+        </div>
+      </div>
+      <span class="badge">VI · EN</span>
+    </header>
+    <main class="grid">
+      <aside class="card stack">
+        <h2>Bắt đầu cuộc trò chuyện</h2>
+        <label
+          >Robot ID<input
+            id="robot"
+            placeholder="UUID robot được cấp phép" /></label
+        ><label
+          >Ngôn ngữ<select id="lang">
+            <option value="vi-VN">Tiếng Việt</option>
+            <option value="en-US">English</option>
+          </select></label
+        ><label
+          >Microphone<select id="micDevice">
+            <option value="">Microphone mặc định</option>
+          </select></label
+        ><button id="start">Mở phiên</button>
+        <div id="sessionState" class="status">Chưa kết nối</div>
+        <div class="notice">
+          Giọng nói được tạo bởi AI. Hệ thống không tư vấn chẩn đoán hoặc điều
+          trị. Trường hợp khẩn cấp, hãy gọi nhân viên y tế.
+        </div>
+      </aside>
+      <section class="card assistant-stage">
+        <div id="voiceFace" class="voice-avatar hidden" aria-live="polite">
+          <div class="avatar-orbit avatar-orbit-one"></div>
+          <div class="avatar-orbit avatar-orbit-two"></div>
+          <div class="robot-face" aria-hidden="true">
+            <div class="robot-ear robot-ear-left"></div>
+            <div class="robot-ear robot-ear-right"></div>
+            <div class="robot-antenna"><span></span></div>
+            <div class="robot-screen">
+              <div class="robot-eyes">
+                <span class="robot-eye"></span>
+                <span class="robot-eye"></span>
+              </div>
+              <div class="robot-cheek robot-cheek-left"></div>
+              <div class="robot-cheek robot-cheek-right"></div>
+              <div class="robot-mouth"></div>
+            </div>
+          </div>
+          <strong id="faceStatus">Mình đang lắng nghe…</strong>
+          <small id="faceHint">Bạn cứ nói tự nhiên nhé</small>
+        </div>
+        <div id="chat" class="conversation">
+          <div class="empty">Nhập Robot ID và mở phiên để bắt đầu.</div>
+        </div>
+        <div class="composer">
+          <div class="row">
+            <textarea
+              id="text"
+              placeholder="Hỏi về khoa phòng, giờ làm việc hoặc yêu cầu chỉ đường…"
+              disabled
+            ></textarea
+            ><button id="mic" class="mic" disabled aria-label="Thu âm">
+              🎙</button
+            ><button id="send" disabled>Gửi</button>
+          </div>
+          <div id="work" class="status"></div>
+        </div>
+      </section>
+    </main>
+    <script>
+      let sessionId,
+        recording = false,
+        audioCtx,
+        processor,
+        source,
+        silentGain,
+        mediaStream,
+        recordingTimer,
+        recordingStartedAt = 0,
+        sampleSquares = 0,
+        sampleCount = 0,
+        peakLevel = 0,
+        voiceTurnActive = false,
+        faceHideTimer,
+        playbackAudio,
+        chunks = [];
+      const $ = (id) => document.getElementById(id);
+      const api = async (url, opt = {}) => {
+        const r = await fetch(url, opt);
+        if (!r.ok)
+          throw new Error(
+            (await r.json().catch(() => ({ message: r.statusText }))).message ||
+              r.statusText,
+          );
+        return r.json();
+      };
+      $("start").onclick = async () => {
+        try {
+          const s = await api("/api/v1/public/assistant/sessions", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              robotId: $("robot").value,
+              language: $("lang").value,
+            }),
+          });
+          sessionId = s.sessionId;
+          $("sessionState").textContent =
+            "Đã kết nối · hết hạn " +
+            new Date(s.expiresAt).toLocaleTimeString();
+          $("text").disabled = $("send").disabled = $("mic").disabled = false;
+          $("chat").innerHTML = "";
+        } catch (e) {
+          $("sessionState").textContent = "Không thể kết nối: " + e.message;
+        }
+      };
+      $("send").onclick = async () => {
+        const text = $("text").value.trim();
+        if (!text) return;
+        add("user", text);
+        $("text").value = "";
+        await turn({ text });
+      };
+      $("text").onkeydown = (e) => {
+        if (e.key === "Enter" && !e.shiftKey) {
+          e.preventDefault();
+          $("send").click();
+        }
+      };
+      async function turn(payload, audio) {
+        busy(true);
+        try {
+          let t;
+          if (audio) {
+            const f = new FormData();
+            f.append(
+              "audio",
+              new Blob([audio], { type: "audio/wav" }),
+              "browser.wav",
+            );
+            t = await api(
+              `/api/v1/public/assistant/sessions/${sessionId}/turns`,
+              {
+                method: "POST",
+                headers: { "Idempotency-Key": crypto.randomUUID() },
+                body: f,
+              },
+            );
+          } else
+            t = await api(
+              `/api/v1/public/assistant/sessions/${sessionId}/turns`,
+              {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  "Idempotency-Key": crypto.randomUUID(),
+                },
+                body: JSON.stringify(payload),
+              },
+            );
+          render(t, Boolean(audio));
+        } catch (e) {
+          add("bot", "Xin lỗi, không thể xử lý: " + e.message);
+          if (audio) {
+            showFace("sad", "Mình chưa nghe rõ", "Bạn thử nói lại nhé");
+            hideFace(2600);
+          }
+        } finally {
+          busy(false);
+        }
+      }
+      function render(t, fromVoice = false) {
+        if (t.status === "FAILED" || t.errorCode) {
+          add(
+            "bot",
+            `<b>Không nhận diện được giọng nói</b><small>${esc(t.errorMessage || t.errorCode || "Vui lòng thử lại")}</small>`,
+            true,
+          );
+          if (fromVoice) {
+            showFace(
+              "sad",
+              "Mình chưa nghe rõ",
+              "Bạn thử nói gần microphone hơn nhé",
+            );
+            hideFace(3000);
+          }
+          return;
+        }
+        let html = `<b>${esc(t.answer || "Không có câu trả lời")}</b>`;
+        if (t.groundingMode)
+          html += `<small>${t.groundingMode === "GENERAL" ? "Thông tin chung — không phải chính sách bệnh viện" : "Dựa trên nguồn bệnh viện"}</small>`;
+        if (t.citations?.length)
+          html += `<div class="sources">${t.citations.map((c) => `<div class="source">[${c.ordinal}] ${esc(c.title)} · ${esc(c.locator || "")}</div>`).join("")}</div>`;
+        if (t.warnings?.length)
+          html += t.warnings
+            .map((w) => `<div class="notice">${esc(w)}</div>`)
+            .join("");
+        if (t.actionPreview && t.confirmationNonce)
+          html += `<div class="row" style="margin-top:10px"><button onclick="confirmAction('${t.turnId}','${t.confirmationNonce}')">Xác nhận ${esc(t.actionPreview.intent)}</button><button class="secondary">Không</button></div>`;
+        add("bot", html, true);
+        if (fromVoice && t.audioUrl) playVoiceAnswer(t.audioUrl);
+        else if (fromVoice) {
+          showFace("happy", "Mình hiểu rồi!", "Câu trả lời ở phía dưới nhé");
+          hideFace(2200);
+        } else if (t.audioUrl) new Audio(t.audioUrl).play().catch(() => {});
+      }
+      async function confirmAction(id, nonce) {
+        busy(true);
+        try {
+          const t = await api(`/api/v1/public/assistant/turns/${id}/confirm`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ nonce }),
+          });
+          add(
+            "bot",
+            t.serviceRequestId
+              ? "Yêu cầu đã được tạo: " + t.serviceRequestId
+              : "Đã xác nhận.",
+          );
+        } catch (e) {
+          add("bot", "Không thể xác nhận: " + e.message);
+        } finally {
+          busy(false);
+        }
+      }
+      function add(kind, content, raw = false) {
+        $("chat").querySelector(".empty")?.remove();
+        const d = document.createElement("div");
+        d.className = "message " + kind;
+        raw ? (d.innerHTML = content) : (d.textContent = content);
+        $("chat").append(d);
+        $("chat").scrollTop = $("chat").scrollHeight;
+      }
+      function busy(v) {
+        $("work").textContent = v ? "Đang xử lý…" : "";
+        $("send").disabled = $("mic").disabled = v || !sessionId;
+      }
+      function esc(s) {
+        return String(s ?? "").replace(
+          /[&<>"']/g,
+          (c) =>
+            ({
+              "&": "&amp;",
+              "<": "&lt;",
+              ">": "&gt;",
+              '"': "&quot;",
+              "'": "&#39;",
+            })[c],
+        );
+      }
+      $("mic").onclick = async () => {
+        if (!recording) {
+          try {
+            voiceTurnActive = true;
+            showFace(
+              "listening",
+              "Mình đang lắng nghe…",
+              "Bạn cứ nói tự nhiên nhé",
+            );
+            const selected = $("micDevice").value;
+            mediaStream = await navigator.mediaDevices.getUserMedia({
+              audio: {
+                deviceId: selected ? { exact: selected } : undefined,
+                channelCount: 1,
+                echoCancellation: true,
+                noiseSuppression: true,
+                autoGainControl: true,
+              },
+            });
+            await refreshMicrophones();
+            audioCtx = new AudioContext();
+            await audioCtx.resume();
+            source = audioCtx.createMediaStreamSource(mediaStream);
+            processor = audioCtx.createScriptProcessor(4096, 1, 1);
+            silentGain = audioCtx.createGain();
+            silentGain.gain.value = 0;
+            chunks = [];
+            sampleSquares = sampleCount = peakLevel = 0;
+            processor.onaudioprocess = (e) => {
+              const samples = new Float32Array(e.inputBuffer.getChannelData(0));
+              chunks.push(samples);
+              for (const value of samples) {
+                const absolute = Math.abs(value);
+                peakLevel = Math.max(peakLevel, absolute);
+                sampleSquares += value * value;
+              }
+              sampleCount += samples.length;
+            };
+            source.connect(processor);
+            processor.connect(silentGain);
+            silentGain.connect(audioCtx.destination);
+            recording = true;
+            recordingStartedAt = performance.now();
+            $("mic").classList.add("live");
+            recordingTimer = setInterval(() => {
+              const seconds = (performance.now() - recordingStartedAt) / 1000;
+              const rms = sampleCount
+                ? Math.sqrt(sampleSquares / sampleCount)
+                : 0;
+              setFaceLevel(rms);
+              $("work").textContent =
+                `Đang nghe ${seconds.toFixed(1)} giây · mức âm ${Math.round(rms * 1000)}`;
+            }, 200);
+            setTimeout(() => recording && $("mic").click(), 20000);
+          } catch (e) {
+            voiceTurnActive = false;
+            showFace("sad", "Không mở được microphone", e.message);
+            hideFace(3000);
+            $("work").textContent = "Không mở được microphone: " + e.message;
+          }
+        } else {
+          recording = false;
+          $("mic").classList.remove("live");
+          clearInterval(recordingTimer);
+          processor.disconnect();
+          source.disconnect();
+          silentGain.disconnect();
+          mediaStream.getTracks().forEach((t) => t.stop());
+          const duration = (performance.now() - recordingStartedAt) / 1000;
+          const rms = sampleCount ? Math.sqrt(sampleSquares / sampleCount) : 0;
+          const wav = encodeWav(chunks, audioCtx.sampleRate);
+          audioCtx.close();
+          if (duration < 0.6 || rms < 0.002 || peakLevel < 0.01) {
+            voiceTurnActive = false;
+            showFace(
+              "sad",
+              "Mình chưa nghe thấy bạn",
+              "Hãy chọn đúng microphone rồi thử lại nhé",
+            );
+            hideFace(3200);
+            $("work").textContent =
+              "Không nghe thấy giọng nói. Hãy chọn đúng microphone và nói gần mic hơn.";
+            add("bot", "Không nghe thấy giọng nói — chưa gửi audio lên AI.");
+            return;
+          }
+          add("user", "🎙 Đã ghi âm");
+          showFace(
+            "thinking",
+            "Để mình suy nghĩ…",
+            "Mình đang tìm thông tin phù hợp",
+          );
+          await turn(null, wav);
+        }
+      };
+      function showFace(mode, status, hint) {
+        clearTimeout(faceHideTimer);
+        const face = $("voiceFace");
+        face.className = `voice-avatar ${mode}`;
+        face.style.setProperty("--voice-level", "0");
+        face.style.setProperty("--mouth-width", "32px");
+        face.style.setProperty("--mouth-height", "12px");
+        $("faceStatus").textContent = status;
+        $("faceHint").textContent = hint;
+      }
+      function hideFace(delay = 0) {
+        clearTimeout(faceHideTimer);
+        faceHideTimer = setTimeout(() => {
+          $("voiceFace").classList.add("hidden");
+          voiceTurnActive = false;
+        }, delay);
+      }
+      function setFaceLevel(rms) {
+        const level = Math.min(1, Math.max(0.08, rms * 35));
+        $("voiceFace").style.setProperty("--voice-level", level.toFixed(2));
+        $("voiceFace").style.setProperty(
+          "--mouth-width",
+          `${30 + level * 18}px`,
+        );
+        $("voiceFace").style.setProperty(
+          "--mouth-height",
+          `${9 + level * 25}px`,
+        );
+      }
+      function playVoiceAnswer(url) {
+        playbackAudio?.pause();
+        playbackAudio = new Audio(url);
+        showFace("speaking", "Mình trả lời nhé!", "MediAssist đang nói");
+        playbackAudio.onended = () => {
+          showFace("happy", "Xong rồi!", "Bạn muốn hỏi thêm gì không?");
+          hideFace(2200);
+        };
+        playbackAudio.onerror = () => hideFace(1800);
+        playbackAudio.play().catch(() => {
+          showFace("happy", "Mình đã trả lời", "Xem nội dung ở phía dưới nhé");
+          hideFace(2200);
+        });
+      }
+      async function refreshMicrophones() {
+        const current = $("micDevice").value;
+        const devices = (
+          await navigator.mediaDevices.enumerateDevices()
+        ).filter((device) => device.kind === "audioinput");
+        $("micDevice").innerHTML =
+          '<option value="">Microphone mặc định</option>' +
+          devices
+            .map(
+              (device, index) =>
+                `<option value="${esc(device.deviceId)}">${esc(device.label || `Microphone ${index + 1}`)}</option>`,
+            )
+            .join("");
+        if (devices.some((device) => device.deviceId === current))
+          $("micDevice").value = current;
+      }
+      function encodeWav(parts, rate) {
+        let len = parts.reduce((n, a) => n + a.length, 0),
+          all = new Float32Array(len),
+          o = 0;
+        parts.forEach((a) => {
+          all.set(a, o);
+          o += a.length;
+        });
+        const ratio = rate / 16000,
+          out = new Float32Array(Math.floor(all.length / ratio));
+        for (let i = 0; i < out.length; i++) {
+          let s = Math.floor(i * ratio),
+            e = Math.min(all.length, Math.floor((i + 1) * ratio)),
+            sum = 0;
+          for (let j = s; j < e; j++) sum += all[j];
+          out[i] = sum / Math.max(1, e - s);
+        }
+        const b = new ArrayBuffer(44 + out.length * 2),
+          v = new DataView(b),
+          w = (p, s) =>
+            [...s].forEach((c, i) => v.setUint8(p + i, c.charCodeAt(0)));
+        w(0, "RIFF");
+        v.setUint32(4, 36 + out.length * 2, true);
+        w(8, "WAVEfmt ");
+        v.setUint32(16, 16, true);
+        v.setUint16(20, 1, true);
+        v.setUint16(22, 1, true);
+        v.setUint32(24, 16000, true);
+        v.setUint32(28, 32000, true);
+        v.setUint16(32, 2, true);
+        v.setUint16(34, 16, true);
+        w(36, "data");
+        v.setUint32(40, out.length * 2, true);
+        out.forEach((x, i) =>
+          v.setInt16(44 + i * 2, Math.max(-1, Math.min(1, x)) * 32767, true),
+        );
+        return b;
+      }
+    </script>
+  </body>
+</html>

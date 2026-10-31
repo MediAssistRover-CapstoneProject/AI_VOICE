@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mediassistrover.invalid/contracts/phase0/mapping-artifact.schema.json",
+  "title": "Artifact manifest and HTTP upload receipt",
+  "$comment": "Phase 12 BE validates manifests using bundled common/artifact and returns a typed HTTP receipt. Mapping is opt-in; Pi upload/SLAM code remains unverified.",
+  "x-provenance": {
+    "status": "IMPLEMENTED_BE_SCHEMA_3_ARTIFACT",
+    "sources": [
+      "../02_Input_Output_11_Step_Type.md",
+      "../phase0-contract-baseline.md"
+    ],
+    "baselineDate": "2026-10-12"
+  },
+  "oneOf": [
+    {
+      "$ref": "common.schema.json#/$defs/artifact"
+    },
+    {
+      "type": "object",
+      "properties": {
+        "stored": {
+          "const": true
+        },
+        "artifactId": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        },
+        "assetHash": {
+          "$ref": "common.schema.json#/$defs/hash"
+        }
+      },
+      "required": [
+        "stored",
+        "artifactId",
+        "assetHash"
+      ],
+      "additionalProperties": false
+    }
+  ]
+}

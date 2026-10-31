@@ -1,0 +1,239 @@
+{
+  "workflow": {
+    "workflowCode": "WF_MAPPING_LOCAL_DEMO",
+    "versionNo": 1,
+    "workflowName": "Quét và lưu bản đồ trên Pi",
+    "serviceType": "MAPPING",
+    "description": "Điều khiển thủ công; lưu PGM, YAML và manifest trên Pi. Chưa tạo bản ghi Map trên BE.",
+    "inputSchemaJson": {
+      "type": "object",
+      "properties": {
+        "floor_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "map_name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        }
+      },
+      "required": [
+        "floor_id",
+        "map_name"
+      ],
+      "additionalProperties": false
+    },
+    "inputUiJson": {},
+    "defaultInputsJson": {},
+    "outputMappingJson": {},
+    "requiredCapabilitiesJson": [],
+    "maxDurationSec": 1800,
+    "maxTotalVisits": 8,
+    "graphVersion": 3,
+    "schemaVersion": 3
+  },
+  "graph": {
+    "startStepCode": "START_MAPPING",
+    "tasks": [
+      {
+        "taskCode": "MAPPING",
+        "taskName": "Quét bản đồ",
+        "sequenceNo": 1,
+        "configJson": {}
+      }
+    ],
+    "steps": [
+      {
+        "taskCode": "MAPPING",
+        "stepType": "EXECUTE_SENSING",
+        "stepCode": "START_MAPPING",
+        "stepName": "START_MAPPING",
+        "sequenceNo": 1,
+        "paramsJson": {
+          "sensing_type": "MAPPING",
+          "action": "START",
+          "preview_rate_hz": 1
+        },
+        "inputMappingJson": {
+          "mapping_session_id": {
+            "$ref": "/vars/mapping_session_id"
+          }
+        },
+        "timeoutSec": 60,
+        "maxAttempts": 1,
+        "retryDelaySec": 0,
+        "retryCodesJson": [],
+        "maxVisits": 1,
+        "auditLevel": "FULL"
+      },
+      {
+        "taskCode": "MAPPING",
+        "stepType": "WAIT",
+        "stepCode": "WAIT_SAVE",
+        "stepName": "WAIT_SAVE",
+        "sequenceNo": 2,
+        "paramsJson": {
+          "wait_type": "EVENT",
+          "event_type": "MAPPING_SAVE_REQUESTED"
+        },
+        "inputMappingJson": {
+          "correlation_key": {
+            "$ref": "/vars/mapping_session_id"
+          }
+        },
+        "timeoutSec": 1500,
+        "maxAttempts": 1,
+        "retryDelaySec": 0,
+        "retryCodesJson": [],
+        "maxVisits": 1,
+        "auditLevel": "FULL"
+      },
+      {
+        "taskCode": "MAPPING",
+        "stepType": "EXECUTE_SENSING",
+        "stepCode": "SAVE_MAPPING",
+        "stepName": "SAVE_MAPPING",
+        "sequenceNo": 3,
+        "paramsJson": {
+          "sensing_type": "MAPPING",
+          "action": "SAVE"
+        },
+        "inputMappingJson": {
+          "mapping_session_id": {
+            "$ref": "/vars/mapping_session_id"
+          },
+          "artifact_id": {
+            "$ref": "/vars/artifact_id"
+          }
+        },
+        "timeoutSec": 90,
+        "maxAttempts": 1,
+        "retryDelaySec": 0,
+        "retryCodesJson": [],
+        "maxVisits": 1,
+        "auditLevel": "FULL"
+      },
+      {
+        "taskCode": "MAPPING",
+        "stepType": "EXECUTE_SENSING",
+        "stepCode": "STOP_MAPPING",
+        "stepName": "STOP_MAPPING",
+        "sequenceNo": 4,
+        "paramsJson": {
+          "sensing_type": "MAPPING",
+          "action": "STOP"
+        },
+        "inputMappingJson": {
+          "mapping_session_id": {
+            "$ref": "/vars/mapping_session_id"
+          }
+        },
+        "timeoutSec": 20,
+        "maxAttempts": 1,
+        "retryDelaySec": 0,
+        "retryCodesJson": [],
+        "maxVisits": 1,
+        "auditLevel": "FULL"
+      }
+    ],
+    "transitions": [
+      {
+        "fromStepCode": "START_MAPPING",
+        "toStepCode": "WAIT_SAVE",
+        "outcome": "SUCCESS",
+        "priority": 1,
+        "defaultTransition": true,
+        "terminalStatus": null
+      },
+      {
+        "fromStepCode": "START_MAPPING",
+        "toStepCode": null,
+        "outcome": "FAILURE",
+        "priority": 1,
+        "defaultTransition": true,
+        "terminalStatus": "FAILED"
+      },
+      {
+        "fromStepCode": "START_MAPPING",
+        "toStepCode": null,
+        "outcome": "TIMEOUT",
+        "priority": 1,
+        "defaultTransition": true,
+        "terminalStatus": "FAILED"
+      },
+      {
+        "fromStepCode": "WAIT_SAVE",
+        "toStepCode": "SAVE_MAPPING",
+        "outcome": "SUCCESS",
+        "priority": 1,
+        "defaultTransition": true,
+        "terminalStatus": null
+      },
+      {
+        "fromStepCode": "WAIT_SAVE",
+        "toStepCode": null,
+        "outcome": "FAILURE",
+        "priority": 1,
+        "defaultTransition": true,
+        "terminalStatus": "FAILED"
+      },
+      {
+        "fromStepCode": "WAIT_SAVE",
+        "toStepCode": null,
+        "outcome": "TIMEOUT",
+        "priority": 1,
+        "defaultTransition": true,
+        "terminalStatus": "FAILED"
+      },
+      {
+        "fromStepCode": "SAVE_MAPPING",
+        "toStepCode": "STOP_MAPPING",
+        "outcome": "SUCCESS",
+        "priority": 1,
+        "defaultTransition": true,
+        "terminalStatus": null
+      },
+      {
+        "fromStepCode": "SAVE_MAPPING",
+        "toStepCode": null,
+        "outcome": "FAILURE",
+        "priority": 1,
+        "defaultTransition": true,
+        "terminalStatus": "FAILED"
+      },
+      {
+        "fromStepCode": "SAVE_MAPPING",
+        "toStepCode": null,
+        "outcome": "TIMEOUT",
+        "priority": 1,
+        "defaultTransition": true,
+        "terminalStatus": "FAILED"
+      },
+      {
+        "fromStepCode": "STOP_MAPPING",
+        "toStepCode": null,
+        "outcome": "SUCCESS",
+        "priority": 1,
+        "defaultTransition": true,
+        "terminalStatus": "SUCCEEDED"
+      },
+      {
+        "fromStepCode": "STOP_MAPPING",
+        "toStepCode": null,
+        "outcome": "FAILURE",
+        "priority": 1,
+        "defaultTransition": true,
+        "terminalStatus": "RECOVERY_REQUIRED"
+      },
+      {
+        "fromStepCode": "STOP_MAPPING",
+        "toStepCode": null,
+        "outcome": "TIMEOUT",
+        "priority": 1,
+        "defaultTransition": true,
+        "terminalStatus": "RECOVERY_REQUIRED"
+      }
+    ]
+  }
+}

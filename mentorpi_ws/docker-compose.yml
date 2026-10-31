@@ -1,0 +1,23 @@
+services:
+  voice-bridge:
+    build: ./src/mediassist_voice_bridge
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      MEDIASSIST_BACKEND_URL: ${MEDIASSIST_BACKEND_URL:?required}
+      MEDIASSIST_DEVICE_JWT: ${MEDIASSIST_DEVICE_JWT:-}
+      MEDIASSIST_ROBOT_CODE: ${MEDIASSIST_ROBOT_CODE:-}
+      MEDIASSIST_DEVICE_SECRET: ${MEDIASSIST_DEVICE_SECRET:-}
+      MEDIASSIST_CA_CERT: ${MEDIASSIST_CA_CERT:-}
+      MEDIASSIST_LANGUAGE: ${MEDIASSIST_LANGUAGE:-vi-VN}
+      ALSA_INPUT_DEVICE: ${ALSA_INPUT_DEVICE:-}
+      ALSA_OUTPUT_DEVICE: ${ALSA_OUTPUT_DEVICE:-}
+    devices:
+      - /dev/snd:/dev/snd
+    group_add:
+      - audio
+    volumes:
+      - voice-state:/var/lib/mediassist-voice
+      - ${MEDIASSIST_CA_CERT_HOST:-/etc/ssl/certs/ca-certificates.crt}:${MEDIASSIST_CA_CERT_CONTAINER:-/etc/ssl/certs/ca-certificates.crt}:ro
+volumes:
+  voice-state:

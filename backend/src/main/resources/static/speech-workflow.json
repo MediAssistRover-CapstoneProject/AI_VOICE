@@ -1,0 +1,114 @@
+{
+  "workflow": {
+    "workflowCode": "WF_ROBOT_SPEECH_DEMO",
+    "versionNo": 1,
+    "workflowName": "Robot phát thông báo",
+    "serviceType": "SPEECH",
+    "description": "Phát văn bản qua loa USB của robot.",
+    "inputSchemaJson": {
+      "type": "object",
+      "properties": {
+        "speech_text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "language_code": {
+          "enum": [
+            "vi",
+            "en"
+          ]
+        }
+      },
+      "required": [
+        "speech_text",
+        "language_code"
+      ],
+      "additionalProperties": false
+    },
+    "inputUiJson": {},
+    "defaultInputsJson": {
+      "speech_text": "Xin chào. Robot đã nhận lệnh từ máy chủ.",
+      "language_code": "vi"
+    },
+    "outputMappingJson": {},
+    "requiredCapabilitiesJson": [],
+    "maxDurationSec": 120,
+    "maxTotalVisits": 2,
+    "graphVersion": 3,
+    "schemaVersion": 3
+  },
+  "graph": {
+    "startStepCode": "SPEAK",
+    "tasks": [
+      {
+        "taskCode": "ANNOUNCE",
+        "taskName": "Phát thông báo",
+        "sequenceNo": 1,
+        "description": "",
+        "configJson": {}
+      }
+    ],
+    "steps": [
+      {
+        "taskCode": "ANNOUNCE",
+        "stepType": "INTERACT",
+        "stepCode": "SPEAK",
+        "stepName": "Đọc văn bản",
+        "sequenceNo": 1,
+        "description": "",
+        "paramsJson": {
+          "prompt_key": "DEMO_SPEAK",
+          "action": "SPEAK"
+        },
+        "inputMappingJson": {
+          "data": {
+            "text": {
+              "$ref": "/inputs/speech_text"
+            },
+            "language_code": {
+              "$ref": "/inputs/language_code"
+            },
+            "speed_wpm": 150,
+            "volume": 70
+          }
+        },
+        "timeoutSec": 90,
+        "maxAttempts": 1,
+        "retryDelaySec": 0,
+        "retryCodesJson": [],
+        "maxVisits": 1,
+        "auditLevel": "FULL"
+      }
+    ],
+    "transitions": [
+      {
+        "fromStepCode": "SPEAK",
+        "toStepCode": null,
+        "outcome": "SUCCESS",
+        "conditionJson": null,
+        "priority": 1,
+        "defaultTransition": true,
+        "terminalStatus": "SUCCEEDED"
+      },
+      {
+        "fromStepCode": "SPEAK",
+        "toStepCode": null,
+        "outcome": "FAILURE",
+        "conditionJson": null,
+        "priority": 1,
+        "defaultTransition": true,
+        "terminalStatus": "FAILED"
+      },
+      {
+        "fromStepCode": "SPEAK",
+        "toStepCode": null,
+        "outcome": "TIMEOUT",
+        "conditionJson": null,
+        "priority": 1,
+        "defaultTransition": true,
+        "terminalStatus": "FAILED"
+      }
+    ]
+  }
+}

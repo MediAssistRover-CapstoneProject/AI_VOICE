@@ -1,0 +1,14 @@
+#mapNavigation .nav-layout{display:grid;grid-template-columns:minmax(0,2fr) minmax(260px,1fr);gap:20px}
+#mapNavigation .nav-map-wrap{display:flex;justify-content:center;align-items:start;background:#e7e7e7;min-height:180px;padding:8px;overflow:auto}
+#mapNavigation canvas{display:block;max-width:100%;height:auto;touch-action:none;cursor:crosshair;image-rendering:pixelated}
+#mapNavigation select,#mapNavigation input{width:100%;padding:9px;border:1px solid #999;border-radius:4px;background:#fff}
+#mapNavigation .nav-inline{display:flex;gap:8px;align-items:end;flex-wrap:wrap}
+#mapNavigation .nav-inline label{flex:1;min-width:180px}
+#mapNavigation .nav-status{padding:10px;background:#eef4ff;white-space:pre-line;line-height:1.5}
+#mapNavigation .nav-error{color:#a51d1d}
+#mapNavigation .nav-legend{display:flex;gap:16px;flex-wrap:wrap;font-size:13px;margin:10px 0}
+#mapNavigation .nav-legend span::before{content:'●';margin-right:5px;color:var(--marker)}
+#mapNavigation #navMove{background:#125cb0;color:#fff}
+#mapNavigation #navCancel{background:#292929;color:#fff}
+#mapNavigation code{overflow-wrap:anywhere}
+@media(max-width:800px){#mapNavigation .nav-layout{grid-template-columns:1fr}}

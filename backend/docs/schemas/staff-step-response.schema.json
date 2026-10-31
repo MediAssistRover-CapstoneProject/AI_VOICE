@@ -1,0 +1,173 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mediassistrover.invalid/contracts/phase0/staff-step-response.schema.json",
+  "title": "UI response body (Idempotency-Key in header)",
+  "$comment": "BE schema 3 callback implemented in Phase 4. Frontend integration is not verified. Derived from Markdown and Phase 0 decisions.",
+  "x-provenance": {
+    "status": "IMPLEMENTED_BE_SCHEMA_3_CALLBACK",
+    "sources": [
+      "../02_Input_Output_11_Step_Type.md",
+      "../phase0-contract-baseline.md"
+    ],
+    "baselineDate": "2026-10-12"
+  },
+  "oneOf": [
+    {
+      "type": "object",
+      "properties": {
+        "responseType": {
+          "const": "PAYLOAD_CONFIRMED"
+        },
+        "data": {
+          "type": "object",
+          "properties": {
+            "confirmed": {
+              "type": "boolean"
+            },
+            "items": {
+              "type": "array",
+              "items": {
+                "$ref": "common.schema.json#/$defs/item"
+              },
+              "minItems": 1
+            }
+          },
+          "required": [
+            "confirmed",
+            "items"
+          ],
+          "additionalProperties": false
+        },
+        "note": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "responseType",
+        "data"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "responseType": {
+          "const": "DOOR_CLOSED"
+        },
+        "data": {
+          "type": "object",
+          "properties": {
+            "closed": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "closed"
+          ],
+          "additionalProperties": false
+        },
+        "note": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "responseType",
+        "data"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "responseType": {
+          "const": "LOCK_CHECKED"
+        },
+        "data": {
+          "type": "object",
+          "properties": {
+            "locked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "locked"
+          ],
+          "additionalProperties": false
+        },
+        "note": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "responseType",
+        "data"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "responseType": {
+          "const": "INTERACTION_CONFIRMED"
+        },
+        "data": {
+          "type": "object",
+          "properties": {
+            "confirmed": {
+              "type": "boolean"
+            },
+            "values": {
+              "type": "object"
+            }
+          },
+          "required": [
+            "confirmed"
+          ],
+          "additionalProperties": false
+        },
+        "note": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "responseType",
+        "data"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "responseType": {
+          "const": "UI_DISPLAYED"
+        },
+        "data": {
+          "type": "object",
+          "properties": {
+            "prompt_key": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "prompt_key"
+          ],
+          "additionalProperties": false
+        },
+        "note": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "responseType",
+        "data"
+      ],
+      "additionalProperties": false
+    }
+  ]
+}

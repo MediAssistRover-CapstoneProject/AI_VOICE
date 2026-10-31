@@ -1,0 +1,10 @@
+CREATE INDEX `IX_Job_queued_at` ON `Job` (`queued_at`);
+CREATE INDEX `IX_Job_workflow_time` ON `Job` (`workflow_id`, `queued_at`);
+CREATE INDEX `IX_ServiceRequest_type_time` ON `ServiceRequest` (`request_type`, `requested_at`);
+CREATE INDEX `IX_Alert_created_at` ON `Alert` (`created_at`);
+CREATE INDEX `IX_Alert_zone_time` ON `Alert` (`zone_id`, `created_at`);
+CREATE INDEX `IX_EmergencyIncident_occurred_at` ON `EmergencyIncident` (`occurred_at`);
+CREATE INDEX `IX_EmergencyIncident_map_time` ON `EmergencyIncident` (`map_id`, `occurred_at`);
+CREATE INDEX `IX_DetectionEvent_detected_at` ON `DetectionEvent` (`detected_at`);
+CREATE INDEX `IX_DetectionEvent_map_time` ON `DetectionEvent` (`map_id`, `detected_at`);
+CREATE INDEX `IX_CrowdDensityRecord_captured_at` ON `CrowdDensityRecord` (`captured_at`);

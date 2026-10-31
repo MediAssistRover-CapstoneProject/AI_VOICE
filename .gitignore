@@ -27,6 +27,15 @@ wheels/
 .installed.cfg
 *.egg
 
+# Java / Maven
+target/
+*.log
+
+# Local runtime data
+data/knowledge/
+*.sqlite
+*.sqlite3
+
 # Virtual Environment
 venv/
 env/
