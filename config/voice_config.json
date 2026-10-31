@@ -1,0 +1,39 @@
+{
+  "robot_code": "ROBOT_MAR_01",
+  "language": "vi-VN",
+  "audio": {
+    "sample_rate": 16000,
+    "channels": 1,
+    "chunk_duration_ms": 30,
+    "silence_threshold_ms": 1500,
+    "max_recording_sec": 15,
+    "min_speech_duration_ms": 500
+  },
+  "stt": {
+    "provider": "whisper",
+    "whisper_model": "whisper-1",
+    "google_model": "latest_long",
+    "google_language": "vi-VN"
+  },
+  "intent": {
+    "confidence_threshold": 0.6,
+    "use_llm_fallback": true,
+    "llm_model": "gpt-4o-mini"
+  },
+  "tts": {
+    "speed_wpm": 150,
+    "cache_enabled": true
+  },
+  "greetings": {
+    "welcome": "Xin chào! Tôi là robot hỗ trợ bệnh viện MediAssist. Bạn cần tôi giúp gì ạ?",
+    "farewell": "Chúc bạn sức khỏe! Nếu cần hỗ trợ, hãy gọi tôi bất cứ lúc nào.",
+    "not_understood": "Xin lỗi, tôi chưa hiểu câu hỏi của bạn. Bạn có thể nói lại được không ạ?",
+    "thinking": "Vui lòng chờ trong giây lát, tôi đang tra cứu thông tin cho bạn.",
+    "error": "Xin lỗi, hệ thống đang gặp sự cố. Vui lòng liên hệ nhân viên bệnh viện để được hỗ trợ."
+  },
+  "escort_prompts": {
+    "confirm": "Bạn muốn tôi dẫn đường đến {destination} phải không ạ? Vui lòng đi theo tôi.",
+    "arrived": "Chúng ta đã đến {destination} rồi ạ. Chúc bạn khám bệnh thuận lợi!",
+    "cancelled": "Đã hủy yêu cầu dẫn đường. Nếu cần giúp đỡ, hãy gọi tôi nhé!"
+  }
+}
