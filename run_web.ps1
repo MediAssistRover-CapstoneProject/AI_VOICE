@@ -3,6 +3,9 @@ param(
     [int]$Port = 7860
 )
 
+$OutputEncoding = [Console]::OutputEncoding = [Console]::InputEncoding = [System.Text.Encoding]::UTF8
+$env:PYTHONIOENCODING = "utf-8"
+
 Write-Host "==========================================================" -ForegroundColor Cyan
 Write-Host " 🌐 Khởi chạy MediAssistRover AI Voice & RAG Web Studio" -ForegroundColor Cyan
 Write-Host "    Địa chỉ truy cập: http://localhost:$Port" -ForegroundColor Green

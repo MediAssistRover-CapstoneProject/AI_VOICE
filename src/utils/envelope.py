@@ -12,6 +12,7 @@ def build_envelope(
     message_type: str,
     payload: dict[str, Any],
     correlation_id: str | None = None,
+    producer_session_id: str | None = None,
     sequence_no: int = 1,
 ) -> dict[str, Any]:
     """Build a PiEnvelope JSON-serialisable dict matching the backend contract."""
@@ -23,6 +24,7 @@ def build_envelope(
         "operationKey": f"voice-op-{msg_id[:8]}",
         "correlationId": correlation_id or str(uuid.uuid4()),
         "robotId": robot_id,
+        "producerSessionId": producer_session_id or str(uuid.uuid4()),
         "messageType": message_type,
         "occurredAt": now.isoformat(),
         "sequenceNo": sequence_no,

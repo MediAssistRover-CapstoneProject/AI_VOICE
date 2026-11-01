@@ -4,6 +4,9 @@ param(
     [string]$Backend = "http://localhost:8080"
 )
 
+$OutputEncoding = [Console]::OutputEncoding = [Console]::InputEncoding = [System.Text.Encoding]::UTF8
+$env:PYTHONIOENCODING = "utf-8"
+
 Write-Host "==========================================================" -ForegroundColor Cyan
 Write-Host " 🤖 MediAssistRover AI Voice Assistant Launcher" -ForegroundColor Cyan
 Write-Host "==========================================================" -ForegroundColor Cyan

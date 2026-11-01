@@ -1,5 +1,7 @@
 # Environment & Secrets
 .env
+.env*
+docs/.env*
 .env.local
 *.secret
 *.pem

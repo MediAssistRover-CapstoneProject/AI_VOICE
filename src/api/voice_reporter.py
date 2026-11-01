@@ -54,6 +54,7 @@ class VoiceReporter:
         command_type: str,
         confidence: float,
         parameters: dict | None = None,
+        status: str = "EXECUTED",
     ) -> str | None:
         """Append a recognised VoiceCommand to the current interaction."""
         if self._interaction_id is None:
@@ -73,9 +74,9 @@ class VoiceReporter:
                 "confidenceScore": round(confidence, 4),
                 "commandType": command_type,
                 "parameters": parameters or {},
-                "status": "RECEIVED",
+                "status": status,
                 "receivedAt": now,
-                "processedAt": None,
+                "processedAt": now if status != "RECEIVED" else None,
             },
         )
         envelope["messageId"] = command_id
@@ -110,7 +111,7 @@ class VoiceReporter:
             self._client.post_voice_interaction_complete(
                 self._interaction_id, envelope
             )
-            log.info("[REPORTER] Interaction completed: %s → %s", self._interaction_id[:8], status)
+            log.info("[REPORTER] Interaction completed: %s -> %s", self._interaction_id[:8], status)
         except Exception as exc:
             log.warning("[REPORTER] Failed to complete interaction: %s", exc)
         finally:
