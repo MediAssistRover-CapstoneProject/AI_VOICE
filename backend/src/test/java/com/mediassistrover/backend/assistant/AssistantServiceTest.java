@@ -1,4 +1,4 @@
-package com.mediassistrover.backend.assistant;
+﻿package com.mediassistrover.backend.assistant;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mediassistrover.backend.config.AssistantProperties;
@@ -76,7 +76,24 @@ class AssistantServiceTest {
         assertThat(response.confirmationNonce()).isNotBlank();
         assertThat(prior.getConfirmationNonceHash()).hasSize(64);
         assertThat(prior.getConfirmationExpiresAt()).isEqualTo(Instant.parse("2026-10-30T10:01:00Z"));
-        verifyNoInteractions(openAi);
+        verify(openAi, never()).answer(any(), any(), any());
         verify(turns, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void missingHospitalEvidenceRefusesWithoutCallingAnswerModel() {
+        UUID id=UUID.randomUUID();
+        VoiceInteraction session=VoiceInteraction.builder().voiceInteractionId(id).channel("KIOSK")
+            .languageCode("vi-VN").visibilityScope("PUBLIC").status(VoiceInteractionStatus.ACTIVE)
+            .expiresAt(Instant.parse("2026-10-30T10:30:00Z")).build();
+        when(sessions.findById(id)).thenReturn(Optional.of(session));
+        when(turns.saveAndFlush(any())).thenAnswer(call -> {
+            VoiceAssistantTurn turn=call.getArgument(0);turn.setTurnId(UUID.randomUUID());return turn;
+        });
+        when(properties.sessionTtl()).thenReturn(java.time.Duration.ofMinutes(30));
+        var response=service.textTurn(id,"Giá cổ phiếu hôm nay?","no-source","KIOSK",null);
+        assertThat(response.answer()).isEqualTo("Tôi không trả lời thông tin này được.");
+        assertThat(response.status()).isEqualTo("READY");
+        verify(openAi, never()).answer(any(), any(), any());
     }
 }
