@@ -119,6 +119,14 @@ class BackendClient:
                 "/api/v1/pi/speech/synthesize",
                 json={"text": text, "languageCode": language, "speedWpm": speed_wpm},
             )
+            # Current BE returns binary audio/wav on HTTP 200, JSON only while pending.
+            content_type = resp.headers.get("content-type", "").split(";", 1)[0].strip().lower()
+            if resp.status_code == 200 and content_type in {"audio/wav", "audio/x-wav", "audio/wave"}:
+                audio = resp.content
+                if 44 <= len(audio) <= 16 * 1024 * 1024 and audio[:4] == b"RIFF" and audio[8:12] == b"WAVE":
+                    return audio
+                log.warning("[TTS] Backend returned invalid or oversized WAV")
+                return None
             body = resp.json()
             state = body.get("state", "")
             if state == "READY":
@@ -135,7 +143,12 @@ class BackendClient:
                 log.warning("[TTS] Server synthesis failed: %s", body.get("code"))
                 return None
             # PENDING – wait and retry
-            _time.sleep(0.8 * (attempt + 1))
+            if attempt < 7:
+                try:
+                    delay = float(resp.headers.get("Retry-After", "0.8"))
+                except ValueError:
+                    delay = 0.8
+                _time.sleep(max(0.2, min(2.0, delay)))
         log.warning("[TTS] Synthesis did not complete after retries")
         return None
 
