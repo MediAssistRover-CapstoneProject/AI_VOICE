@@ -170,6 +170,8 @@ class VoiceEngine:
         if wav_bytes is None:
             return  # No speech detected, continue listening
 
+        started = time.monotonic()
+
         # 3. Speech-to-Text
         text = self._stt.transcribe(wav_bytes, self._config.get("language", "vi-VN"))
         if not text:
@@ -187,10 +189,12 @@ class VoiceEngine:
         # 6. Handle intent
         response_text = self._dispatch_intent(intent)
 
+        log.info("[LATENCY] STT + intent + retrieval + answer: %.3fs", time.monotonic() - started)
         # 7. Speak response
         if response_text:
             self._tts.speak_fallback(response_text)
 
+        log.info("[LATENCY] Turn including speech playback: %.3fs", time.monotonic() - started)
         # Reporting must not delay the audible answer; keep events ordered.
         self._reporter.start_interaction(self._config.get("language", "vi-VN"))
         # 5. Record command in backend
@@ -201,6 +205,7 @@ class VoiceEngine:
             confidence=intent.confidence,
             parameters=intent.entities,
         )
+
 
         # 8. Complete interaction
         self._reporter.complete_interaction(
