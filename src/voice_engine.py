@@ -170,18 +170,12 @@ class VoiceEngine:
         if wav_bytes is None:
             return  # No speech detected, continue listening
 
-        # 2. Start voice interaction record
-        interaction_id = self._reporter.start_interaction(
-            self._config.get("language", "vi-VN")
-        )
-
         # 3. Speech-to-Text
         text = self._stt.transcribe(wav_bytes, self._config.get("language", "vi-VN"))
         if not text:
             self._tts.speak_fallback(
                 self._greetings.get("not_understood", "Xin lỗi, tôi chưa nghe rõ.")
             )
-            self._reporter.complete_interaction("COMPLETED", "UNKNOWN", "No transcription")
             return
 
         log.info("[ENGINE] 🗣  Patient said: '%s'", text)
@@ -190,6 +184,15 @@ class VoiceEngine:
         intent = self._intent.classify(text)
         log.info("[ENGINE] 🎯 Intent: %s (conf=%.2f)", intent.intent, intent.confidence)
 
+        # 6. Handle intent
+        response_text = self._dispatch_intent(intent)
+
+        # 7. Speak response
+        if response_text:
+            self._tts.speak_fallback(response_text)
+
+        # Reporting must not delay the audible answer; keep events ordered.
+        self._reporter.start_interaction(self._config.get("language", "vi-VN"))
         # 5. Record command in backend
         self._reporter.record_command(
             raw_text=text,
@@ -198,13 +201,6 @@ class VoiceEngine:
             confidence=intent.confidence,
             parameters=intent.entities,
         )
-
-        # 6. Handle intent
-        response_text = self._dispatch_intent(intent)
-
-        # 7. Speak response
-        if response_text:
-            self._tts.speak_fallback(response_text)
 
         # 8. Complete interaction
         self._reporter.complete_interaction(
