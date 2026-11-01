@@ -261,8 +261,7 @@ class VoiceEngine:
         except Exception as exc:
             log.warning("[ENGINE] RAG query failed: %s, falling back to direct MySQL", exc)
 
-        # 2. Fallback: Direct MySQL query via Backend REST API
-        return self._query.answer(intent.raw_text, self._config.get("language", "vi-VN"))
+        return "Tôi không trả lời thông tin này được."
 
     def _handle_escort(self, intent: IntentResult) -> str:
         """Handle patient escort requests."""
@@ -318,16 +317,7 @@ class VoiceEngine:
         )
 
     def _handle_unknown(self, intent: IntentResult) -> str:
-        # Try to query hospital info as a last resort
-        if len(intent.raw_text) > 5:
-            answer = self._query.answer(intent.raw_text)
-            if "chưa tìm thấy" not in answer.lower():
-                return answer
-
-        return self._greetings.get(
-            "not_understood",
-            "Xin lỗi, tôi chưa hiểu câu hỏi của bạn. Bạn có thể nói lại được không ạ?"
-        )
+        return self._handle_query(intent)
 
     def _get_rooms(self) -> list[dict]:
         """Fetch and cache the room list."""

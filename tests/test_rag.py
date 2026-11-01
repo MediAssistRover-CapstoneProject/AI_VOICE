@@ -96,4 +96,4 @@ class TestRAGPipeline:
     def test_answer_out_of_scope(self, vector_store):
         pipeline = HospitalRAGPipeline(vector_store=vector_store, score_threshold=0.85)
         res = pipeline.answer_question("Ai là tổng thống Mỹ?")
-        assert "chưa tìm thấy" in res["answer"].lower() or "quầy tiếp đón" in res["answer"].lower()
+        assert res["answer"] == "Tôi không trả lời thông tin này được."

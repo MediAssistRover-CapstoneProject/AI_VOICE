@@ -31,10 +31,12 @@ def test_intent_dispatch_unknown_fallback():
         engine._escort_prompts = {}
         engine._query = MagicMock()
         engine._query.answer.return_value = "chưa tìm thấy thông tin"
+        engine._rag = MagicMock()
+        engine._rag.answer_question.return_value = {"confidence": 0, "answer": "Tôi không trả lời thông tin này được."}
         engine._config = {"language": "vi-VN"}
         engine._rooms = None
         engine._backend = MagicMock()
 
         intent = IntentResult("UNKNOWN", 0.3, {}, "abc")
         result = engine._dispatch_intent(intent)
-        assert "chưa hiểu" in result.lower() or "chưa tìm thấy" in result.lower()
+        assert result == "Tôi không trả lời thông tin này được."
