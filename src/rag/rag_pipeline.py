@@ -72,6 +72,21 @@ class HospitalRAGPipeline:
             self._answer_cache.move_to_end(key)
             return copy.deepcopy(cached[1])
 
+        # Only explicitly reviewed, exact FAQ questions bypass generation.
+        for point in self.vector_store.points:
+            meta = point.metadata
+            if meta.get("approved") is not True or not meta.get("source"):
+                continue
+            if meta.get("visibility") != "PUBLIC":
+                continue
+            questions = meta.get("questions", [])
+            if isinstance(questions, list) and any(
+                isinstance(q, str) and " ".join(q.casefold().split()) == key
+                for q in questions
+            ):
+                return {"answer": point.text, "sources": [{"source": meta["source"]}],
+                        "confidence": 1.0, "context_used": point.text}
+
         # 1. RETRIEVE from Vector Store ('Vector P')
         search_results: list[SearchResult] = self.vector_store.similarity_search(
             query=question,

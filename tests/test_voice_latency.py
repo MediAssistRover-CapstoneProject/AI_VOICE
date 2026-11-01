@@ -21,3 +21,13 @@ def test_answer_cache_invalidates_when_source_changes():
         s.points[0].text = 'Giờ khám từ 8 giờ.'
         rag.answer_question('Giờ khám?')
         assert generate.call_count == 2
+
+
+def test_reviewed_exact_faq_skips_search_and_model():
+    s = store()
+    s.points[0].metadata.update(approved=True, visibility='PUBLIC', questions=['Giờ khám?'])
+    rag = HospitalRAGPipeline(s)
+    with patch.object(s, 'similarity_search') as search, patch.object(rag, '_generate_answer') as generate:
+        assert rag.answer_question('Giờ khám?')['answer'] == s.points[0].text
+        search.assert_not_called()
+        generate.assert_not_called()
