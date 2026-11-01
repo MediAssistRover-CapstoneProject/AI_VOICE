@@ -5,7 +5,7 @@
     "sample_rate": 16000,
     "channels": 1,
     "chunk_duration_ms": 30,
-    "silence_threshold_ms": 1500,
+    "silence_threshold_ms": 700,
     "max_recording_sec": 15,
     "min_speech_duration_ms": 500
   },
@@ -17,7 +17,7 @@
   },
   "intent": {
     "confidence_threshold": 0.6,
-    "use_llm_fallback": true,
+    "use_llm_fallback": false,
     "llm_model": "gpt-4o-mini"
   },
   "tts": {
