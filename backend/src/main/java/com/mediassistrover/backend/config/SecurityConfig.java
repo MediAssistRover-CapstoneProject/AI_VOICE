@@ -45,6 +45,7 @@ public class SecurityConfig {
                                 "/assistant-staff.html",
                                 "/knowledge-admin.html",
                                 "/assistant.css",
+                                "/kiosk-voice.js",
                                 "/favicon.svg",
                                 "/swagger-ui/**",
                                 "/api/v1/auth/login",
