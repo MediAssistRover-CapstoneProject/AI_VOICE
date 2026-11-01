@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from collections import OrderedDict
 from typing import Any
 
@@ -88,6 +89,7 @@ class SpeechClient:
 
     def speak_fallback(self, text: str) -> None:
         """Best-effort speech: try backend TTS, fall back to console print."""
-        if not self.speak(text):
-            log.info("[TTS-FALLBACK] Printing instead: %s", text)
-            print(f"\n🔊 Robot says: {text}\n")
+        for sentence in re.split(r"(?<=[.!?])\s+", text.strip()):
+            if sentence and not self.speak(sentence):
+                log.info("[TTS-FALLBACK] Printing instead: %s", sentence)
+                print(f"\n🔊 Robot says: {sentence}\n")

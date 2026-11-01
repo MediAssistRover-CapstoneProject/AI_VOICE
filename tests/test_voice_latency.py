@@ -34,12 +34,12 @@ def test_reviewed_exact_faq_skips_search_and_model():
         generate.assert_not_called()
 
 
-def test_audio_is_reused_from_cache():
+def test_audio_is_reused_and_sentences_are_spoken_in_order():
     backend = Mock()
     backend.synthesize_speech.return_value = b'audio'
     tts = SpeechClient(backend)
     with patch('src.tts.play_wav') as play:
-        tts.speak('Xin chào.')
-        tts.speak('Xin chào.')
-        assert backend.synthesize_speech.call_count == 1
-        assert play.call_count == 2
+        tts.speak_fallback('Xin chào. Tôi là Mar.')
+        tts.speak_fallback('Xin chào. Tôi là Mar.')
+        assert backend.synthesize_speech.call_count == 2
+        assert play.call_count == 4
