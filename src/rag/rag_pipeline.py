@@ -6,6 +6,11 @@ Connects:
 from __future__ import annotations
 
 import logging
+import time
+import copy
+import hashlib
+import json
+from collections import OrderedDict
 from typing import Any
 
 from src.rag.vector_store import HospitalVectorStore, SearchResult
@@ -46,10 +51,26 @@ class HospitalRAGPipeline:
         self.llm_model = llm_model
         self.top_k = top_k
         self.score_threshold = score_threshold
+        self._answer_cache = OrderedDict()
+        self._cache_revision = None
 
     def answer_question(self, question: str) -> dict[str, Any]:
         """Execute RAG pipeline: Retrieve relevant context from Vector P and generate answer."""
         log.info("[RAG] Received question: '%s'", question)
+
+        # Exact questions only: never reuse a similar but materially different answer.
+        revision = hashlib.sha256(json.dumps(
+            [(p.id, p.text, p.metadata) for p in self.vector_store.points],
+            ensure_ascii=False, sort_keys=True, default=str,
+        ).encode()).hexdigest()
+        if revision != self._cache_revision:
+            self._answer_cache.clear()
+            self._cache_revision = revision
+        key = " ".join(question.casefold().split())
+        cached = self._answer_cache.get(key)
+        if cached and time.monotonic() - cached[0] < 300:
+            self._answer_cache.move_to_end(key)
+            return copy.deepcopy(cached[1])
 
         # 1. RETRIEVE from Vector Store ('Vector P')
         search_results: list[SearchResult] = self.vector_store.similarity_search(
@@ -86,12 +107,18 @@ class HospitalRAGPipeline:
         # 3. GENERATE with LLM
         answer = self._generate_answer(question, combined_context)
 
-        return {
+        result = {
             "answer": answer,
             "sources": sources,
             "confidence": top_score,
             "context_used": combined_context,
         }
+
+        if answer and answer != "Tôi không trả lời thông tin này được.":
+            self._answer_cache[key] = (time.monotonic(), copy.deepcopy(result))
+            while len(self._answer_cache) > 128:
+                self._answer_cache.popitem(last=False)
+        return result
 
     def _generate_answer(self, question: str, context: str) -> str:
         """Call LLM or offline generator with augmented context."""
