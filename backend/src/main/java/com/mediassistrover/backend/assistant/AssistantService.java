@@ -1,4 +1,4 @@
-﻿package com.mediassistrover.backend.assistant;
+package com.mediassistrover.backend.assistant;
 
 import com.fasterxml.jackson.databind.*;
 import com.fasterxml.jackson.databind.node.*;
@@ -45,7 +45,7 @@ public class AssistantService {
             if(Set.of("NAVIGATION","ESCORT","SOS").contains(intent)){ObjectNode action=prepareAction(session,intent,result.path("destination").asText(""));if(action!=null&&properties.isVoiceActionsEnabled()){nonce=randomNonce();turn.setActionJson(action);turn.setConfirmationNonceHash(hash(nonce));turn.setConfirmationExpiresAt(Instant.now(clock).plusSeconds(60));turn.setStatus("AWAITING_CONFIRMATION");}else turn.setStatus("READY");}
             else if("STOP_CANCEL".equals(intent)){if(properties.isVoiceActionsEnabled())executeStop(session,turn);turn.setStatus("READY");}else turn.setStatus("READY");
             turn.setLatencyMs(Duration.between(started,Instant.now(clock)).toMillis());turn.setCompletedAt(Instant.now(clock));session.setLastActivityAt(turn.getCompletedAt());session.setExpiresAt(turn.getCompletedAt().plus(properties.sessionTtl()));
-            try{byte[] wav=openAi.synthesizeWav(turn.getSpeechText(),language);Path dir=properties.getSpeechStorageDir();Files.createDirectories(dir);Path path=dir.resolve(turn.getTurnId()+".wav");Files.write(path,wav);turn.setAudioPath(path.toAbsolutePath().normalize().toString());turn.setAudioSha256(hashBytes(wav));}catch(RuntimeException|java.io.IOException ignored){}
+            try{if(!"KIOSK".equals(channel)){byte[] wav=openAi.synthesizeWav(turn.getSpeechText(),language);Path dir=properties.getSpeechStorageDir();Files.createDirectories(dir);Path path=dir.resolve(turn.getTurnId()+".wav");Files.write(path,wav);turn.setAudioPath(path.toAbsolutePath().normalize().toString());turn.setAudioSha256(hashBytes(wav));}}catch(RuntimeException|java.io.IOException ignored){}
         }catch(Exception e){turn.setStatus("FAILED");turn.setErrorCode(errorCode(e));turn.setErrorMessage(limit(rootMessage(e),1000));turn.setLatencyMs(Duration.between(started,Instant.now(clock)).toMillis());turn.setCompletedAt(Instant.now(clock));}
         return response(turn,nonce);}
 

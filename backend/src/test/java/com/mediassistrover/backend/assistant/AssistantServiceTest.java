@@ -1,4 +1,4 @@
-﻿package com.mediassistrover.backend.assistant;
+package com.mediassistrover.backend.assistant;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mediassistrover.backend.config.AssistantProperties;
@@ -76,12 +76,12 @@ class AssistantServiceTest {
         assertThat(response.confirmationNonce()).isNotBlank();
         assertThat(prior.getConfirmationNonceHash()).hasSize(64);
         assertThat(prior.getConfirmationExpiresAt()).isEqualTo(Instant.parse("2026-10-30T10:01:00Z"));
-        verify(openAi, never()).answer(any(), any(), any());
+        verifyNoInteractions(openAi);
         verify(turns, never()).saveAndFlush(any());
     }
 
     @Test
-    void missingHospitalEvidenceRefusesWithoutCallingAnswerModel() {
+    void missingHospitalEvidenceRefusesWithoutCallingAnswerModelOrKioskTts() {
         UUID id=UUID.randomUUID();
         VoiceInteraction session=VoiceInteraction.builder().voiceInteractionId(id).channel("KIOSK")
             .languageCode("vi-VN").visibilityScope("PUBLIC").status(VoiceInteractionStatus.ACTIVE)
@@ -94,6 +94,6 @@ class AssistantServiceTest {
         var response=service.textTurn(id,"Giá cổ phiếu hôm nay?","no-source","KIOSK",null);
         assertThat(response.answer()).isEqualTo("Tôi không trả lời thông tin này được.");
         assertThat(response.status()).isEqualTo("READY");
-        verify(openAi, never()).answer(any(), any(), any());
+        verifyNoInteractions(openAi);
     }
 }
