@@ -1,3 +1,4 @@
+from src.tts import SpeechClient
 from unittest.mock import Mock, patch
 from src.rag.rag_pipeline import HospitalRAGPipeline
 from src.rag.vector_store import HospitalVectorStore
@@ -31,3 +32,14 @@ def test_reviewed_exact_faq_skips_search_and_model():
         assert rag.answer_question('Giờ khám?')['answer'] == s.points[0].text
         search.assert_not_called()
         generate.assert_not_called()
+
+
+def test_audio_is_reused_from_cache():
+    backend = Mock()
+    backend.synthesize_speech.return_value = b'audio'
+    tts = SpeechClient(backend)
+    with patch('src.tts.play_wav') as play:
+        tts.speak('Xin chào.')
+        tts.speak('Xin chào.')
+        assert backend.synthesize_speech.call_count == 1
+        assert play.call_count == 2
