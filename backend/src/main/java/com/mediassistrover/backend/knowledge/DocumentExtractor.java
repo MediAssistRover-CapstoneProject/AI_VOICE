@@ -41,10 +41,20 @@ public class DocumentExtractor {
     }
     private Extracted docx(Path file)throws IOException{
         try(InputStream in=Files.newInputStream(file);XWPFDocument doc=new XWPFDocument(in)){
-            StringBuilder text=new StringBuilder();for(XWPFParagraph p:doc.getParagraphs()){String value=p.getText().trim();if(value.isEmpty())continue;String style=p.getStyle();if(style!=null&&style.toLowerCase(Locale.ROOT).startsWith("heading"))text.append("\n\n[HEADING] ");else text.append("\n");text.append(value);if(text.length()>2_000_000)throw new BusinessRuleException("Document exceeds the 2 million character limit");}
-            for(XWPFTable table:doc.getTables())for(XWPFTableRow row:table.getRows()){text.append('\n');for(XWPFTableCell cell:row.getTableCells())text.append(cell.getText()).append(" | ");}
+            StringBuilder text=new StringBuilder();String currentHeading=null;
+            for(IBodyElement element:doc.getBodyElements()){
+                if(element instanceof XWPFParagraph p){String value=clean(p.getText());if(value.isEmpty())continue;String style=p.getStyle();boolean heading=style!=null&&style.toLowerCase(Locale.ROOT).startsWith("heading");if(heading){currentHeading=value;text.append("\n\n[HEADING] ").append(value);}else text.append('\n').append(value);}
+                else if(element instanceof XWPFTable table){
+                    List<XWPFTableRow> rows=table.getRows();if(rows.isEmpty())continue;
+                    text.append("\n[TABLE]\n[TABLE_HEADING] ").append(currentHeading==null?"Bảng thông tin":currentHeading);
+                    for(int rowIndex=0;rowIndex<rows.size();rowIndex++){List<String> cells=rows.get(rowIndex).getTableCells().stream().map(c->clean(c.getText())).toList();text.append(rowIndex==0?"\n[TABLE_HEADER] ":"\n[TABLE_ROW] ").append(String.join(" | ",cells));}
+                    text.append("\n[/TABLE]");
+                }
+                if(text.length()>2_000_000)throw new BusinessRuleException("Document exceeds the 2 million character limit");
+            }
             return checked(text.toString(),Math.max(1,doc.getProperties().getExtendedProperties().getUnderlyingProperties().getPages()),"DOCX_TEXT");
         }
     }
+    private String clean(String value){return value==null?"":value.replace('\u0000',' ').replaceAll("[\\r\\n\\t]+"," ").replaceAll("\\s{2,}"," ").trim();}
     private Extracted checked(String text,int pages,String method){String clean=text==null?"":text.replace("\u0000","").trim();if(clean.isBlank())throw new BusinessRuleException("No readable text was extracted");if(clean.length()>2_000_000)throw new BusinessRuleException("Document exceeds the 2 million character limit");return new Extracted(clean,pages,method);}
 }

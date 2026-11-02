@@ -17,7 +17,17 @@ public class AssistantProperties {
     private boolean publicEnabled;
     private boolean voiceActionsEnabled;
     private boolean piBridgeEnabled;
+    private boolean generalKnowledgeEnabled = true;
+    private boolean hybridRetrievalEnabled = true;
+    private boolean automaticDeduplicationEnabled = true;
     private String publicRobotIds = "";
+    private String publicDefaultRobotId = "";
+    private String wakePhrases = "hello mar,hello ma,hê lô mar";
+    private int idleTimeoutSeconds = 10;
+    private String introTextVi = "Xin chào, tôi là MAR, trợ lý thông tin của Bệnh viện MediAssist. Tôi có thể giúp bạn tìm khoa phòng, tra cứu quy trình và trả lời câu hỏi chung. Bạn cần tôi hỗ trợ gì?";
+    private String goodbyeTextVi = "Phiên hỗ trợ đã kết thúc. Khi cần, hãy nói Hello MAR.";
+    private String introTextEn = "Hello, I am MAR, MediAssist Hospital's information assistant. I can help you find departments, look up procedures, and answer general questions. How may I help you?";
+    private String goodbyeTextEn = "This support session has ended. Say Hello MAR whenever you need me.";
     private int sessionTtlMinutes = 30;
     private int retentionDays = 90;
     private String openaiApiKey = "";
@@ -46,8 +56,28 @@ public class AssistantProperties {
     public void setVoiceActionsEnabled(boolean voiceActionsEnabled) { this.voiceActionsEnabled = voiceActionsEnabled; }
     public boolean isPiBridgeEnabled() { return piBridgeEnabled; }
     public void setPiBridgeEnabled(boolean piBridgeEnabled) { this.piBridgeEnabled = piBridgeEnabled; }
+    public boolean isGeneralKnowledgeEnabled() { return generalKnowledgeEnabled; }
+    public void setGeneralKnowledgeEnabled(boolean value) { this.generalKnowledgeEnabled = value; }
+    public boolean isHybridRetrievalEnabled() { return hybridRetrievalEnabled; }
+    public void setHybridRetrievalEnabled(boolean value) { this.hybridRetrievalEnabled = value; }
+    public boolean isAutomaticDeduplicationEnabled() { return automaticDeduplicationEnabled; }
+    public void setAutomaticDeduplicationEnabled(boolean value) { this.automaticDeduplicationEnabled = value; }
     public String getPublicRobotIds() { return publicRobotIds; }
     public void setPublicRobotIds(String publicRobotIds) { this.publicRobotIds = publicRobotIds; }
+    public String getPublicDefaultRobotId() { return publicDefaultRobotId; }
+    public void setPublicDefaultRobotId(String value) { this.publicDefaultRobotId = value; }
+    public String getWakePhrases() { return wakePhrases; }
+    public void setWakePhrases(String value) { this.wakePhrases = value; }
+    public int getIdleTimeoutSeconds() { return idleTimeoutSeconds; }
+    public void setIdleTimeoutSeconds(int value) { this.idleTimeoutSeconds = value; }
+    public String getIntroTextVi() { return introTextVi; }
+    public void setIntroTextVi(String value) { this.introTextVi = value; }
+    public String getGoodbyeTextVi() { return goodbyeTextVi; }
+    public void setGoodbyeTextVi(String value) { this.goodbyeTextVi = value; }
+    public String getIntroTextEn() { return introTextEn; }
+    public void setIntroTextEn(String value) { this.introTextEn = value; }
+    public String getGoodbyeTextEn() { return goodbyeTextEn; }
+    public void setGoodbyeTextEn(String value) { this.goodbyeTextEn = value; }
     public int getSessionTtlMinutes() { return sessionTtlMinutes; }
     public void setSessionTtlMinutes(int sessionTtlMinutes) { this.sessionTtlMinutes = sessionTtlMinutes; }
     public int getRetentionDays() { return retentionDays; }

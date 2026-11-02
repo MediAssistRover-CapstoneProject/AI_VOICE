@@ -33,6 +33,8 @@ Giữ 11 step types. BE xử lý nghiệp vụ; Pi chạy handler robot. MOVE c�
 2. Đăng nhập ADMIN và mở `/knowledge-admin.html` để upload PDF, DOCX, JPG hoặc PNG. Tệp tối đa 25 MB; pipeline tự extract/OCR, chunk, embedding và chuyển `READY`.
 3. Chỉ bật `ASSISTANT_PUBLIC_ENABLED` sau khi điền UUID robot vào `ASSISTANT_PUBLIC_ROBOT_IDS`. API Guest có rate limit và action cần nonce xác nhận 60 giây.
 4. `ASSISTANT_VOICE_ACTIONS_ENABLED` và `ASSISTANT_PI_BRIDGE_ENABLED` mặc định tắt; chỉ bật sau hardware acceptance.
+5. Kiosk tự lấy robot mặc định từ `ASSISTANT_PUBLIC_DEFAULT_ROBOT_ID` (hoặc robot đầu tiên trong allowlist), tự mở Guest session và chờ `Hello MAR`. Lần đầu vẫn cần cấp quyền microphone; nút `Bắt đầu thủ công` phát lời giới thiệu và nghe ngay. Sau `ASSISTANT_IDLE_TIMEOUT_SECONDS` giây im lặng, MAR phát lời kết rồi quay lại chờ wake word.
+6. `ASSISTANT_GENERAL_KNOWLEDGE_ENABLED`, `ASSISTANT_HYBRID_RETRIEVAL_ENABLED` và `ASSISTANT_AUTOMATIC_DEDUPLICATION_ENABLED` điều khiển riêng fallback kiến thức chung, RRF vector/keyword và lưu duy nhất bản READY mới nhất. Câu trả lời GENERAL luôn có cảnh báo và không tạo navigation/escort/SOS.
 
 API mới:
 

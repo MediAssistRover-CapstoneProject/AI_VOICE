@@ -20,6 +20,7 @@ public class KnowledgeDocument {
     @Column(name="visibility",nullable=false,length=16) private String visibility;
     @Column(name="status",nullable=false,length=24) private String status;
     @ManyToOne(fetch=FetchType.LAZY) @JoinColumn(name="replaces_document_id") private KnowledgeDocument replacesDocument;
+    @ManyToOne(fetch=FetchType.LAZY) @JoinColumn(name="duplicate_of_document_id") private KnowledgeDocument duplicateOfDocument;
     @ManyToOne(fetch=FetchType.LAZY) @JoinColumn(name="current_version_id") private KnowledgeDocumentVersion currentVersion;
     @Column(name="effective_from") private Instant effectiveFrom;
     @Column(name="effective_until") private Instant effectiveUntil;

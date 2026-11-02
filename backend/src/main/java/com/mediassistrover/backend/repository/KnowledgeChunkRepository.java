@@ -14,7 +14,7 @@ public interface KnowledgeChunkRepository extends JpaRepository<KnowledgeChunk, 
           AND (d.effective_from IS NULL OR d.effective_from<=CURRENT_TIMESTAMP(6))
           AND (d.effective_until IS NULL OR d.effective_until>CURRENT_TIMESTAMP(6))
           AND MATCH(c.content) AGAINST (:query IN NATURAL LANGUAGE MODE)
-        ORDER BY MATCH(c.content) AGAINST (:query IN NATURAL LANGUAGE MODE) DESC LIMIT 12
+        ORDER BY MATCH(c.content) AGAINST (:query IN NATURAL LANGUAGE MODE) DESC LIMIT 20
         """,nativeQuery=true)
     List<KnowledgeChunk> keywordSearch(@Param("query") String query,@Param("internal") boolean internal);
 }

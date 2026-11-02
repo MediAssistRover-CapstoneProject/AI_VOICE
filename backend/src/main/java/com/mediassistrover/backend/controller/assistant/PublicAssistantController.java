@@ -1,10 +1,11 @@
 package com.mediassistrover.backend.controller.assistant;
 import com.mediassistrover.backend.assistant.*;import com.mediassistrover.backend.assistant.AssistantDtos.*;
 import jakarta.validation.Valid;import lombok.RequiredArgsConstructor;import org.springframework.http.*;import org.springframework.web.bind.annotation.*;import org.springframework.web.multipart.MultipartFile;import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
-import java.util.UUID;
+import java.util.*;
 @RestController @RequestMapping("/api/v1/public/assistant") @RequiredArgsConstructor
 public class PublicAssistantController {
  private final AssistantService service;
+ @GetMapping("/config") public PublicConfigResponse config(@RequestParam(defaultValue="vi-VN")String language){return service.publicConfig(language);}
  @PostMapping("/sessions") @ResponseStatus(HttpStatus.CREATED) public SessionResponse session(@RequestBody CreateSessionRequest r){return service.createPublicSession(r);}
  @PostMapping("/sessions/{id}/turns") public TurnResponse text(@PathVariable UUID id,@RequestHeader(value="Idempotency-Key",required=false)String key,@RequestBody TextTurnRequest r){return service.textTurn(id,r.text(),key,"KIOSK",null);}
  @PostMapping(value="/sessions/{id}/turns",consumes=MediaType.MULTIPART_FORM_DATA_VALUE) public TurnResponse audio(@PathVariable UUID id,@RequestHeader(value="Idempotency-Key",required=false)String key,@RequestPart("audio") MultipartFile file)throws Exception{return service.audioTurn(id,file.getBytes(),file.getOriginalFilename(),key,"KIOSK",null);}
