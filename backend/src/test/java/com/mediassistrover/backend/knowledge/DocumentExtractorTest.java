@@ -46,4 +46,20 @@ class DocumentExtractorTest {
         assertThat(result.pages()).isEqualTo(1);
         assertThat(result.text()).contains("[PAGE 1]","Outpatient reception");
     }
+
+    @Test void keepsDocxTableBetweenSurroundingParagraphsAndMarksCompleteRows() throws Exception {
+        Path path=directory.resolve("hours.docx");
+        try(XWPFDocument document=new XWPFDocument()){
+            var heading=document.createParagraph();heading.setStyle("Heading1");heading.createRun().setText("Nhà thuốc ngoại trú");
+            document.createParagraph().createRun().setText("Giờ phục vụ như sau:");
+            var table=document.createTable(2,3);table.getRow(0).getCell(0).setText("Ngày");table.getRow(0).getCell(1).setText("Mở cửa");table.getRow(0).getCell(2).setText("Đóng cửa");
+            table.getRow(1).getCell(0).setText("Thứ Bảy");table.getRow(1).getCell(1).setText("07:00");table.getRow(1).getCell(2).setText("13:00");
+            document.createParagraph().createRun().setText("Vui lòng mang theo đơn thuốc.");
+            try(var output=Files.newOutputStream(path)){document.write(output);}
+        }
+        String text=extractor.extract(path,"application/vnd.openxmlformats-officedocument.wordprocessingml.document").text();
+        assertThat(text).contains("[TABLE_HEADER] Ngày | Mở cửa | Đóng cửa","[TABLE_ROW] Thứ Bảy | 07:00 | 13:00");
+        assertThat(text.indexOf("Giờ phục vụ")).isLessThan(text.indexOf("[TABLE]"));
+        assertThat(text.indexOf("[/TABLE]")).isLessThan(text.indexOf("Vui lòng mang"));
+    }
 }

@@ -26,6 +26,7 @@ class AudioCaptureNode(Node):
         self.declare_parameter('max_seconds', 20)
         self.declare_parameter('max_bytes', 5 * 1024 * 1024)
         self.declare_parameter('silence_seconds', 1.2)
+        self.declare_parameter('start_speech_timeout_seconds', 10.0)
         self.declare_parameter('vad_aggressiveness', 2)
         self.declare_parameter('capture_directory', '/var/lib/mediassist-voice/captures')
         self._recording = False
@@ -35,7 +36,7 @@ class AudioCaptureNode(Node):
         self._state = self.create_publisher(String, '/mediassist_voice/state', 10)
         self._error = self.create_publisher(String, '/mediassist_voice/error', 10)
         self.create_subscription(Bool, '/mediassist_voice/playback_active', self._playback, 10)
-        self.create_service(Trigger, '/mediassist_voice/start_capture', self._start)
+        self.create_service(Trigger, '/mediassist_voice/capture_once', self._start)
         self.create_service(Trigger, '/mediassist_voice/cancel_capture', self._cancel)
 
     def _playback(self, msg):
@@ -66,6 +67,7 @@ class AudioCaptureNode(Node):
         max_seconds = int(self.get_parameter('max_seconds').value)
         max_bytes = int(self.get_parameter('max_bytes').value)
         silence_seconds = float(self.get_parameter('silence_seconds').value)
+        start_timeout = float(self.get_parameter('start_speech_timeout_seconds').value)
         frame_ms, frame_samples = 30, rate * 30 // 1000
         device = self.get_parameter('input_device').value or None
         vad = webrtcvad.Vad(int(self.get_parameter('vad_aggressiveness').value))
@@ -73,7 +75,7 @@ class AudioCaptureNode(Node):
         try:
             with sd.RawInputStream(samplerate=rate, blocksize=frame_samples, device=device,
                                    channels=1, dtype='int16') as stream:
-                deadline = time.monotonic() + max_seconds
+                started = time.monotonic(); deadline = started + max_seconds
                 while time.monotonic() < deadline and not self._stop.is_set():
                     raw, overflow = stream.read(frame_samples)
                     if overflow:
@@ -86,6 +88,8 @@ class AudioCaptureNode(Node):
                     if sum(map(len, frames)) + 44 > max_bytes:
                         raise RuntimeError('captured audio exceeds max_bytes')
                     if heard_speech and silence_frames * frame_ms / 1000.0 >= silence_seconds:
+                        break
+                    if not heard_speech and time.monotonic() - started >= start_timeout:
                         break
             if self._stop.is_set():
                 self._publish_state('CANCELLED')
@@ -113,7 +117,7 @@ class AudioCaptureNode(Node):
     def _publish_error(self, code, message):
         msg = String(); msg.data = json.dumps({'code': code, 'message': message[:500]})
         self._error.publish(msg)
-        self._publish_state('FAILED')
+        self._publish_state('NO_SPEECH' if code == 'NO_SPEECH' else 'FAILED')
 
 
 def main(args=None):

@@ -28,6 +28,15 @@ class BridgeContractTest(unittest.TestCase):
         self.assertIn("'max_seconds', 20", capture)
         self.assertIn("'max_bytes', 5 * 1024 * 1024", capture)
         self.assertIn("dtype='int16'", capture)
+        self.assertIn("'start_speech_timeout_seconds', 10.0", capture)
+
+    def test_wake_and_coordinator_are_in_hospital_launch(self):
+        launch = (ROOT / 'launch' / 'mediassist_voice.launch.py').read_text(encoding='utf-8')
+        self.assertIn("executable='wake_word_node'", launch)
+        self.assertIn("executable='conversation_coordinator_node'", launch)
+        wake = (ROOT / 'mediassist_voice_bridge' / 'wake_word_node.py').read_text(encoding='utf-8')
+        self.assertIn("b'\\xaa\\x55\\x03\\x00\\xfb'", wake)
+        self.assertIn("'hello mar'", wake)
 
 
 if __name__ == '__main__':

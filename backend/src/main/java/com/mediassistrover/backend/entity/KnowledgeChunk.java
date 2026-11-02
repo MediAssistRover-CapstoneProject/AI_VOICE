@@ -13,10 +13,13 @@ public class KnowledgeChunk {
     @Id @GeneratedValue @UuidGenerator @Column(name="chunk_id",columnDefinition="BINARY(16)") private UUID chunkId;
     @ManyToOne(fetch=FetchType.LAZY,optional=false) @JoinColumn(name="version_id",nullable=false) private KnowledgeDocumentVersion version;
     @Column(name="chunk_index",nullable=false) private int chunkIndex;
+    @Column(name="chunk_type",nullable=false,length=16) private String chunkType;
     @Column(name="heading",length=500) private String heading;
     @Column(name="page_from") private Integer pageFrom;
     @Column(name="page_to") private Integer pageTo;
     @Column(name="content",nullable=false,columnDefinition="TEXT") private String content;
+    @Column(name="content_hash",nullable=false,length=64,columnDefinition="CHAR(64)") private String contentHash;
+    @Column(name="locator",length=255) private String locator;
     @Column(name="token_estimate",nullable=false) private int tokenEstimate;
     @Column(name="qdrant_point_id",nullable=false,length=36,columnDefinition="CHAR(36)") private String qdrantPointId;
     @Column(name="created_at",nullable=false) private Instant createdAt;

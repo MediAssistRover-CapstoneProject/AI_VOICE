@@ -6,7 +6,7 @@
     <title>MediAssist — Trợ lý bệnh viện</title>
     <link rel="icon" href="/favicon.svg" />
     <link rel="stylesheet" href="/assistant.css" />
-  <style>.assistant-stage{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:580px}.voice-avatar{position:relative;inset:auto;width:100%;min-height:380px}#answer{white-space:pre-wrap;text-align:center}#mic{margin:20px;min-width:180px}</style></head>
+  <style>.assistant-stage{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:580px}.voice-avatar{position:relative;inset:auto;width:100%;min-height:380px}#answer{white-space:pre-wrap;text-align:center}#mic{margin:20px;min-width:210px}#sourceBadge.warning{background:#fff3cd;color:#7a5200;border-color:#e4bd55}#permission[hidden],label[hidden]{display:none!important}</style></head>
   <body>
     <header>
       <div class="brand">
@@ -34,8 +34,8 @@
           >Microphone<select id="micDevice">
             <option value="">Microphone mặc định</option>
           </select></label
-        ><button id="start">Mở phiên</button>
-        <div id="sessionState" class="status">Chưa kết nối</div>
+        ><button id="permission" class="secondary">Cho phép microphone</button>
+        <div id="sessionState" class="status">Đang khởi tạo…</div>
         <div class="notice">
           Giọng nói được tạo bởi AI. Hệ thống không tư vấn chẩn đoán hoặc điều
           trị. Trường hợp khẩn cấp, hãy gọi nhân viên y tế.
@@ -59,10 +59,10 @@
               <div class="robot-mouth"></div>
             </div>
           </div>
-          <strong id="faceStatus">Mar chưa bật microphone</strong>
-          <small id="faceHint">Mở phiên rồi bấm Bật giọng nói</small>
+          <strong id="faceStatus">MAR đang khởi tạo</strong>
+          <small id="faceHint">Lần đầu trình duyệt sẽ xin quyền microphone</small>
         </div>
-<p id="answer" aria-live="polite"></p><div id="actions"></div><button id="mic" disabled>🎙 Bật giọng nói</button><div id="work" role="status"></div>
+<span id="sourceBadge" class="badge" hidden></span><p id="answer" aria-live="polite"></p><div id="actions"></div><button id="mic" disabled>🎙 Bắt đầu thủ công</button><div id="work" role="status"></div>
       </section>
     </main>
 <script src="/kiosk-voice.js"></script></body></html>

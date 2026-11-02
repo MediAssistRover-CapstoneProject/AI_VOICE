@@ -1,4 +1,5 @@
 import base64
+import hashlib
 import json
 import os
 import sqlite3
@@ -26,6 +27,7 @@ class BackendVoiceBridgeNode(Node):
         self.declare_parameter('ca_certificate', '')
         self.declare_parameter('request_timeout_seconds', 90)
         self.declare_parameter('journal_path', '/var/lib/mediassist-voice/journal.sqlite3')
+        self.declare_parameter('prompt_cache_directory', '/var/lib/mediassist-voice/prompts')
         self._session_id = None
         self._device_token = None
         self._last_confirmation = None
@@ -38,6 +40,7 @@ class BackendVoiceBridgeNode(Node):
         self._playback = self.create_publisher(String, '/mediassist_voice/playback_command', 10)
         self.create_subscription(String, '/mediassist_voice/captured_audio', self._captured, 10)
         self.create_subscription(String, '/mediassist_voice/playback_finished', self._playback_finished, 10)
+        self.create_subscription(String, '/mediassist_voice/system_prompt_request', self._system_prompt, 10)
         self.create_service(Trigger, '/mediassist_voice/confirm_action', self._confirm)
         self._db = self._open_journal()
         self.create_timer(15.0, self._retry_pending)
@@ -78,8 +81,10 @@ class BackendVoiceBridgeNode(Node):
                 self._publish(self._receipt, json.dumps({'turn_id': turn['turnId'], 'status': 'AWAITING_CONFIRMATION', 'action': turn.get('actionPreview')}, ensure_ascii=False))
             if turn.get('audioUrl') and turn.get('audioSha256'):
                 # The DEVICE JWT remains process-local and is never exposed on a ROS topic.
-                command = {'turn_id': turn['turnId'], 'url': self._url(turn['audioUrl']), 'sha256': turn['audioSha256']}
+                command = {'turn_id': turn['turnId'], 'kind': 'ANSWER', 'url': self._url(turn['audioUrl']), 'sha256': turn['audioSha256']}
                 self._publish(self._playback, json.dumps(command)); self._publish_state('PLAYING')
+            elif turn.get('speechText'):
+                self._prepare_prompt(json.dumps({'kind':'ANSWER','text':turn['speechText'],'language':turn.get('language',self.get_parameter('language').value)},ensure_ascii=False))
             else: self._publish_state('IDLE')
         except Exception as exc:
             if isinstance(exc, requests.HTTPError) and exc.response is not None and exc.response.status_code == 401:
@@ -121,6 +126,33 @@ class BackendVoiceBridgeNode(Node):
             status = json.loads(msg.data).get('status')
             self._publish_state('IDLE' if status == 'PLAYED' else 'FAILED')
         except Exception: self._publish_state('FAILED')
+
+    def _system_prompt(self, msg):
+        threading.Thread(target=self._prepare_prompt, args=(msg.data,), daemon=True).start()
+
+    def _prepare_prompt(self, raw):
+        try:
+            request=json.loads(raw); language='en' if request.get('language','vi').lower().startswith('en') else 'vi'
+            body={'text': request['text'], 'languageCode': language, 'speedWpm': 150}
+            response=None
+            for _attempt in range(20):
+                response=requests.post(self._url('/api/v1/pi/speech/synthesize'), headers={'Authorization':'Bearer '+self._token()}, json=body, timeout=self._timeout(), verify=self._verify())
+                if response.status_code==200: break
+                if response.status_code!=202: response.raise_for_status()
+                time.sleep(2)
+            if response is None or response.status_code!=200: raise RuntimeError('TTS prompt was not ready before timeout')
+            if not response.content.startswith(b'RIFF'): raise RuntimeError('backend returned invalid prompt WAV')
+            digest=hashlib.sha256(response.content).hexdigest(); expected=response.headers.get('X-Audio-SHA256',digest)
+            if digest!=expected: raise RuntimeError('prompt WAV SHA-256 mismatch')
+            directory=self.get_parameter('prompt_cache_directory').value; os.makedirs(directory,mode=0o750,exist_ok=True)
+            path=os.path.join(directory,digest+'.wav')
+            if not os.path.isfile(path):
+                temporary=path+'.tmp'
+                with open(temporary,'wb') as output: output.write(response.content)
+                os.replace(temporary,path)
+            command={'turn_id':'system-'+request.get('kind','PROMPT').lower(),'kind':request.get('kind','PROMPT'),'local_path':path,'sha256':digest}
+            self._publish(self._playback,json.dumps(command)); self._publish_state('PLAYING')
+        except Exception as exc: self._publish_error('SYSTEM_PROMPT_FAILED',str(exc))
 
     def _token(self):
         token = self._device_token or os.environ.get(self.get_parameter('device_token_env').value, '')

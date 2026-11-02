@@ -5,6 +5,7 @@ public final class AssistantDtos {
     private AssistantDtos(){}
     public record CreateSessionRequest(UUID robotId,String language){}
     public record SessionResponse(UUID sessionId,UUID robotId,String channel,String scope,String language,Instant expiresAt){}
+    public record PublicConfigResponse(UUID defaultRobotId,List<String> wakePhrases,int idleTimeoutSeconds,String introText,String goodbyeText){}
     public record TextTurnRequest(String text){}
     public record CitationResponse(int ordinal,String sourceType,UUID documentId,UUID articleId,UUID chunkId,String title,String locator,double score){}
     public record ActionPreview(String intent,String destination,UUID endpointId,boolean confirmationRequired,Instant expiresAt){}

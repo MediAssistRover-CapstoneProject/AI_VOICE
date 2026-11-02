@@ -96,4 +96,15 @@ class AssistantServiceTest {
         assertThat(response.status()).isEqualTo("READY");
         verifyNoInteractions(openAi);
     }
+
+    @Test
+    void generalKnowledgeHasMandatoryWarningAndSpokenDisclaimerWithoutHospitalCitation() throws Exception {
+        UUID id=UUID.randomUUID();VoiceInteraction session=VoiceInteraction.builder().voiceInteractionId(id).channel("KIOSK").languageCode("vi-VN").visibilityScope("PUBLIC").status(VoiceInteractionStatus.ACTIVE).expiresAt(Instant.parse("2026-10-30T10:30:00Z")).build();
+        when(sessions.findById(id)).thenReturn(Optional.of(session));when(turns.saveAndFlush(any())).thenAnswer(call->{VoiceAssistantTurn turn=call.getArgument(0);turn.setTurnId(UUID.randomUUID());return turn;});when(properties.sessionTtl()).thenReturn(java.time.Duration.ofMinutes(30));when(properties.isGeneralKnowledgeEnabled()).thenReturn(true);when(properties.getResponseModel()).thenReturn("test-model");
+        var modelResult=json.readTree("""
+          {"intent":"INFORMATION","answer":"Albert Einstein là một nhà vật lý.","speech_text":"Albert Einstein là một nhà vật lý.","language":"vi-VN","grounding_mode":"GENERAL","destination":"","confirmation_required":false,"warnings":[],"used_source_ids":[]}
+          """);when(openAi.answer(anyString(),anyString(),any())).thenReturn(modelResult);
+        var response=service.textTurn(id,"Albert Einstein là ai?","general","KIOSK",null);
+        assertThat(response.groundingMode()).isEqualTo("GENERAL");assertThat(response.citations()).isEmpty();assertThat(response.warnings()).contains("GENERAL_KNOWLEDGE_NOT_HOSPITAL");assertThat(response.speechText()).startsWith("Đây là kiến thức chung, không phải thông tin chính thức của bệnh viện.");
+    }
 }

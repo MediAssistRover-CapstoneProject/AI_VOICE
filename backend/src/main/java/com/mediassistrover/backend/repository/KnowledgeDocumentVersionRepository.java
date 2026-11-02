@@ -4,4 +4,6 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import java.util.*;
 public interface KnowledgeDocumentVersionRepository extends JpaRepository<KnowledgeDocumentVersion, UUID> {
     List<KnowledgeDocumentVersion> findByDocumentDocumentIdOrderByVersionNoDesc(UUID documentId);
+    List<KnowledgeDocumentVersion> findBySha256AndStatusOrderByReadyAtDesc(String sha256,String status);
+    List<KnowledgeDocumentVersion> findByStatusOrderByReadyAtDesc(String status);
 }
