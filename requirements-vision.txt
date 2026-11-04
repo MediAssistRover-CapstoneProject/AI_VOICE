@@ -1,0 +1,12 @@
+# Dedicated Python 3.11 vision environment; do not combine with Voice pins.
+# Versions match the locally verified MAR_Fall_AI runtime.
+numpy==2.4.6
+ultralytics==8.4.192
+onnxruntime==1.31.1
+mediapipe==1.2.0
+opencv-contrib-python==5.0.0.93
+fastapi==0.162.0
+uvicorn==0.54.0
+httpx==0.28.1
+python-dotenv==1.2.4
+imageio-ffmpeg==0.7.0

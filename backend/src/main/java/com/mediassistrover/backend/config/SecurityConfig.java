@@ -43,6 +43,8 @@ public class SecurityConfig {
                                 "/mapping.html",
                                 "/assistant-kiosk.html",
                                 "/assistant-staff.html",
+                                "/vision-staff.html",
+                                "/vision-staff.js",
                                 "/knowledge-admin.html",
                                 "/assistant.css",
                                 "/kiosk-voice.js",

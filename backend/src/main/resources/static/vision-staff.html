@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MediAssist · Cảnh báo té ngã</title><link rel="stylesheet" href="/assistant.css"></head>
+<body><header><div class="brand"><div><h1>Cảnh báo té ngã</h1><p>Nhận diện nghi ngã, cần nhân viên xác minh</p></div></div>
+<a href="/assistant-staff.html">Trợ lý Voice</a></header>
+<main class="grid"><section class="card stack"><h2>Phiên nhân viên</h2>
+<label>Tên đăng nhập<input id="username" autocomplete="username"></label>
+<label>Mật khẩu<input id="password" type="password" autocomplete="current-password"></label>
+<button id="login">Đăng nhập STAFF / ADMIN</button>
+<label>Hoặc JWT nhân viên<input id="token" type="password" autocomplete="off"></label>
+<button id="connect">Tải cảnh báo</button><button id="logout" class="secondary">Ngắt phiên</button>
+<p id="state" role="status">Chưa đăng nhập.</p>
+<p>Dữ liệu cập nhật mỗi 4 giây khi trang đang mở. Trang này không gửi push khi ứng dụng đã tắt.</p>
+<p>Phiên mô phỏng Vision chỉ lưu quan sát, không tạo cảnh báo staff.</p>
+</section><section class="card"><h2>Các sự kiện được phân quyền</h2>
+<div id="newAlert" role="alert" aria-live="assertive"></div><div id="alerts"></div>
+</section></main><script src="/vision-staff.js"></script></body></html>

@@ -1,0 +1,9 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const { isNewFall } = require('../backend/src/main/resources/static/vision-staff.js');
+const alert = { alertId: 'a1', notificationType: 'SUSPECTED_FALL', status: 'OPEN', severity: 'WARNING', dataJson: { simulation: false } };
+test('a WARNING fall appears as a new staff alert', () => assert.equal(isNewFall(alert, new Set()), true));
+test('a seen fall does not alert again', () => assert.equal(isNewFall(alert, new Set(['a1'])), false));
+test('acknowledged falls do not announce as new', () => assert.equal(isNewFall({ ...alert, status: 'ACKNOWLEDGED' }, new Set()), false));
+test('simulation does not announce a live emergency', () => assert.equal(isNewFall({ ...alert, dataJson: { simulation: true } }, new Set()), false));
+test('another event type does not become a fall', () => assert.equal(isNewFall({ ...alert, notificationType: 'SOS' }, new Set()), false));
