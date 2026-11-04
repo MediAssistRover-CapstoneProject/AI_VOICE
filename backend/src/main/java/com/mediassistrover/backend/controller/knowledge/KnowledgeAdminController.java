@@ -14,6 +14,13 @@ import java.util.*;
 @RestController @RequestMapping("/api/v1/admin/knowledge/documents") @RequiredArgsConstructor @PreAuthorize("hasRole('ADMIN')")
 public class KnowledgeAdminController {
     private final KnowledgeAdminService service;
+    @PostMapping(consumes=MediaType.APPLICATION_JSON_VALUE) @ResponseStatus(HttpStatus.CREATED)
+    public DocumentView createText(@RequestBody KnowledgeDtos.EditRequest body,@AuthenticationPrincipal AccountPrincipal actor){return service.saveText(null,body,actor);}
+    @PutMapping(value="/{id}",consumes=MediaType.APPLICATION_JSON_VALUE)
+    public DocumentView edit(@PathVariable UUID id,@RequestBody KnowledgeDtos.EditRequest body,@AuthenticationPrincipal AccountPrincipal actor){return service.saveText(id,body,actor);}
+    @PutMapping(value="/{id}",consumes=MediaType.MULTIPART_FORM_DATA_VALUE)
+    public DocumentView replace(@PathVariable UUID id,@RequestPart("file")MultipartFile file,@RequestParam String title,@RequestParam String category,@RequestParam String language,@RequestParam String visibility,@RequestParam UUID expectedVersionId,@AuthenticationPrincipal AccountPrincipal actor){return service.replaceFile(id,new KnowledgeDtos.EditRequest(title,category,language,visibility,null,expectedVersionId),file,actor);}
+    @GetMapping("/{id}/editor") public KnowledgeDtos.EditorView editor(@PathVariable UUID id){return service.editor(id);}
     @PostMapping(consumes=MediaType.MULTIPART_FORM_DATA_VALUE) @ResponseStatus(HttpStatus.CREATED)
     public DocumentView upload(@RequestPart("file") MultipartFile file,@RequestParam String title,@RequestParam String category,@RequestParam(defaultValue="vi-VN") String language,@RequestParam(defaultValue="PUBLIC") String visibility,@RequestParam(required=false) @DateTimeFormat(iso=DateTimeFormat.ISO.DATE_TIME) Instant effectiveFrom,@RequestParam(required=false) @DateTimeFormat(iso=DateTimeFormat.ISO.DATE_TIME) Instant effectiveUntil,@RequestParam(required=false) UUID replacesDocumentId,@AuthenticationPrincipal AccountPrincipal actor){return service.upload(file,title,category,language,visibility,effectiveFrom,effectiveUntil,replacesDocumentId,actor);}
     @GetMapping public List<DocumentView> list(){return service.list();}@GetMapping("/{id}") public DocumentView get(@PathVariable UUID id){return service.get(id);}

@@ -6,6 +6,12 @@ import org.junit.jupiter.api.io.TempDir;
 import java.net.*;
 import java.nio.file.*;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
+import com.mediassistrover.backend.assistant.OpenAiGateway;
+import com.mediassistrover.backend.assistant.VoiceSettingsService;
+import org.springframework.test.util.ReflectionTestUtils;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
 import static org.assertj.core.api.Assertions.*;
 
 class OpenAiTtsServiceTest {
@@ -59,5 +65,44 @@ class OpenAiTtsServiceTest {
     @Test void quotaErrorDoesNotRetryAndSpendAgain() throws Exception {
         server.createContext("/quota",e->{e.sendResponseHeaders(429,-1);e.close();});
         service.close();service=create(true,"test-key","/quota");assertThat(waitFor().code()).isEqualTo("TTS_PROVIDER_QUOTA");
+    }
+    @Test void changingVoiceStyleOrSpeedUsesNewAudioWhileBrowserOnlyChangesReuseCache() throws Exception {
+        var received = new AtomicReference<com.fasterxml.jackson.databind.JsonNode>();
+        server.createContext("/dynamic",e->{
+            received.set(new ObjectMapper().readTree(e.getRequestBody()));submissions.incrementAndGet();
+            e.sendResponseHeaders(200,wav.length);e.getResponseBody().write(wav);e.close();
+        });
+        service.close();service=create(true,"test-key","/dynamic");
+        var settings=mock(VoiceSettingsService.class);
+        ReflectionTestUtils.setField(service,"voiceSettings",settings);
+        when(settings.current()).thenReturn(new VoiceSettingsService.Settings("FEMALE","coral","CALM",1,"","BROWSER",0));
+        assertThat(waitFor().audio()).isEqualTo(wav);
+        when(settings.current()).thenReturn(new VoiceSettingsService.Settings("MALE","cedar","WARM",1.25,"","CLOUD",1));
+        assertThat(waitFor().audio()).isEqualTo(wav);
+        assertThat(submissions.get()).isEqualTo(2);
+        assertThat(received.get().path("voice").asText()).isEqualTo("cedar");
+        assertThat(received.get().path("speed").asDouble()).isEqualTo(1.25);
+        assertThat(received.get().path("instructions").asText()).contains("warm");
+        when(settings.current()).thenReturn(new VoiceSettingsService.Settings("MALE","cedar","WARM",1.25,"new-browser-voice","BROWSER",2));
+        assertThat(service.request("Xin chào","vi").state()).isEqualTo("READY");
+        assertThat(submissions.get()).isEqualTo(2);
+    }
+    @Test void realtimeUsesItsConfiguredModelAndClampsCombinedSpeechSpeed() throws Exception {
+        service.close();
+        var gateway=mock(OpenAiGateway.class);
+        var settings=mock(VoiceSettingsService.class);
+        when(settings.current()).thenReturn(new VoiceSettingsService.Settings("MALE","cedar","FORMAL",1.5,"","CLOUD",1));
+        when(gateway.synthesizeWav(eq("Xin chào"),eq("vi"),any(),eq("gpt-realtime-2.1-mini"))).thenReturn(wav);
+        service=new OpenAiTtsService(true,"test-key","coral",1,"gpt-realtime-2.1-mini","",directory,new ObjectMapper(),URI.create("http://unused"),gateway);
+        ReflectionTestUtils.setField(service,"voiceSettings",settings);
+        for(int i=0;i<100;i++){
+            var result=service.request("Xin chào","vi",220);
+            if(!result.state().equals("PENDING")){assertThat(result.audio()).isEqualTo(wav);break;}
+            Thread.sleep(30);
+        }
+        var captured=org.mockito.ArgumentCaptor.forClass(VoiceSettingsService.Settings.class);
+        verify(gateway).synthesizeWav(eq("Xin chào"),eq("vi"),captured.capture(),eq("gpt-realtime-2.1-mini"));
+        assertThat(captured.getValue().rate()).isEqualTo(1.5);
+        assertThat(captured.getValue().cloudVoice()).isEqualTo("cedar");
     }
 }

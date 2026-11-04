@@ -21,6 +21,7 @@ public class DocumentExtractor {
     private final OpenAiGateway openAi;
     public Extracted extract(Path file,String mediaType)throws IOException{
         String type=mediaType==null?"":mediaType.toLowerCase(Locale.ROOT);
+        if(type.equals("text/plain"))return checked(Files.readString(file,java.nio.charset.StandardCharsets.UTF_8),1,"TEXT");
         if(type.equals("application/pdf"))return pdf(file);
         if(type.equals("application/vnd.openxmlformats-officedocument.wordprocessingml.document"))return docx(file);
         if(type.equals("image/jpeg")||type.equals("image/png")){String text=openAi.ocr(Files.readAllBytes(file),type);return checked(text,1,"OPENAI_VISION");}

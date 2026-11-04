@@ -26,6 +26,56 @@ public class KnowledgeAdminService {
     private final AssistantProperties properties;private final DocumentExtractor extractor;private final OpenAiGateway openAi;private final QdrantKnowledgeStore qdrant;private final Clock clock;
     private final AuditService audit;
 
+    @Transactional(readOnly=true)
+    public EditorView editor(UUID id) {
+        KnowledgeDocumentVersion v=latest(document(id));
+        return new EditorView(v.getVersionId(),v.getExtractedText()==null?"":v.getExtractedText());
+    }
+
+    @Transactional
+    public DocumentView saveText(UUID id,EditRequest request,AccountPrincipal actor) {
+        String content=required(request.content(),"content",200000);
+        return saveRevision(id,request,content.getBytes(java.nio.charset.StandardCharsets.UTF_8),"noi-dung.txt","text/plain",actor);
+    }
+
+    @Transactional
+    public DocumentView replaceFile(UUID id,EditRequest request,MultipartFile file,AccountPrincipal actor) {
+        if(file==null||file.isEmpty()||file.getSize()>25L*1024*1024)throw new BusinessRuleException("Chọn tệp không quá 25 MB.");
+        String type=mediaType(file);if(!TYPES.contains(type))throw new BusinessRuleException("Only PDF, DOCX, JPG and PNG are supported");
+        try{return saveRevision(id,request,file.getBytes(),safeName(file.getOriginalFilename()),type,actor);}
+        catch(java.io.IOException e){throw new IllegalStateException("Unable to read uploaded file",e);}
+    }
+
+    private DocumentView saveRevision(UUID id,EditRequest r,byte[] bytes,String filename,String mediaType,AccountPrincipal actor) {
+        if(!properties.isEnabled())throw new BusinessRuleException("Knowledge assistant is disabled");
+        String title=required(r.title(),"title",255),category=required(r.category(),"category",80),language=normalizeLanguage(r.language()),visibility=normalizeVisibility(r.visibility());
+        Instant now=Instant.now(clock);
+        KnowledgeDocument d;
+        int number=1;
+        if(id==null){
+            Account account=accounts.findById(actor.accountId()).orElseThrow(()->new ResourceNotFoundException("Account not found"));
+            d=KnowledgeDocument.builder().createdBy(account).createdAt(now).updatedAt(now).build();
+        }else{
+            d=lockedDocument(id);
+            if(Set.of("UPLOADED","PROCESSING").contains(d.getStatus()))throw new BusinessRuleException("Tài liệu đang xử lý. Hãy chờ hoàn tất trước khi sửa.");
+            if("ARCHIVED".equals(d.getStatus()))throw new BusinessRuleException("Hãy khôi phục tài liệu trước khi sửa.");
+            KnowledgeDocumentVersion prior=latest(d);
+            if(!prior.getVersionId().equals(r.expectedVersionId()))throw new BusinessRuleException("Tài liệu đã thay đổi. Hãy mở lại bản mới nhất.");
+            number=prior.getVersionNo()+1;
+        }
+        d.setTitle(title);d.setCategory(category);d.setLanguageCode(language);d.setVisibility(visibility);d.setStatus("UPLOADED");d.setUpdatedAt(now);d.setDuplicateOfDocument(null);
+        d=documents.saveAndFlush(d);
+        KnowledgeDocumentVersion v=versions.saveAndFlush(KnowledgeDocumentVersion.builder().document(d).versionNo(number).originalFilename(filename).mediaType(mediaType).storagePath("").sha256("").sizeBytes(bytes.length).status("UPLOADED").createdAt(now).build());
+        Path dir=properties.getKnowledgeStorageDir().resolve(d.getDocumentId().toString());Path path=dir.resolve(v.getVersionId()+extension(filename));
+        try{Files.createDirectories(dir);Files.write(path,bytes);}catch(java.io.IOException e){throw new IllegalStateException("Unable to store document",e);}
+        v.setStoragePath(path.toAbsolutePath().normalize().toString());v.setSha256(sha256(path));
+        jobs.save(KnowledgeIngestionJob.builder().version(v).status("PENDING").attemptCount(0).nextAttemptAt(now).createdAt(now).updatedAt(now).build());
+        return view(d,true);
+    }
+
+    private KnowledgeDocumentVersion latest(KnowledgeDocument d){return versions.findByDocumentDocumentIdOrderByVersionNoDesc(d.getDocumentId()).stream().findFirst().orElseThrow(()->new BusinessRuleException("Document has no version"));}
+    private KnowledgeDocument lockedDocument(UUID id){return documents.lockById(id).orElseThrow(()->new ResourceNotFoundException("Document not found"));}
+
     @Transactional
     public DocumentView upload(MultipartFile file,String title,String category,String language,String visibility,Instant effectiveFrom,Instant effectiveUntil,UUID replacesId,AccountPrincipal actor){
         if(!properties.isEnabled())throw new BusinessRuleException("Knowledge assistant is disabled");if(file==null||file.isEmpty())throw new BusinessRuleException("A document file is required");if(file.getSize()>25L*1024*1024)throw new BusinessRuleException("File exceeds 25 MB");
@@ -41,14 +91,42 @@ public class KnowledgeAdminService {
     }
     @Transactional(readOnly=true) public List<DocumentView> list(){return documents.findAll().stream().sorted(Comparator.comparing(KnowledgeDocument::getCreatedAt).reversed()).map(d->view(d,false)).toList();}
     @Transactional(readOnly=true) public DocumentView get(UUID id){return view(document(id),true);}
-    @Transactional public DocumentView reindex(UUID id){KnowledgeDocument d=document(id);KnowledgeDocumentVersion v=d.getCurrentVersion();if(v==null)throw new BusinessRuleException("Document has no ready version");try{qdrant.deleteVersion(v.getVersionId());}catch(RuntimeException ignored){}chunks.deleteByVersionVersionId(v.getVersionId());Instant now=Instant.now(clock);v.setStatus("UPLOADED");v.setErrorCode(null);v.setErrorMessage(null);v.setReadyAt(null);d.setStatus("PROCESSING");jobs.save(KnowledgeIngestionJob.builder().version(v).status("PENDING").attemptCount(0).nextAttemptAt(now).createdAt(now).updatedAt(now).build());return view(d,true);}
-    @Transactional public void archive(UUID id){KnowledgeDocument d=document(id);d.setStatus("ARCHIVED");if(d.getCurrentVersion()!=null){d.getCurrentVersion().setStatus("ARCHIVED");try{qdrant.deleteVersion(d.getCurrentVersion().getVersionId());}catch(RuntimeException ignored){}}}
+    @Transactional public DocumentView reindex(UUID id){
+        KnowledgeDocument d=lockedDocument(id);
+        if(Set.of("UPLOADED","PROCESSING").contains(d.getStatus()))throw new BusinessRuleException("Tài liệu đang xử lý.");
+        KnowledgeDocumentVersion previous=latest(d);
+        // Citations retain their original chunk IDs. Reindex into a new version
+        // and switch the current version only after all vectors have been stored.
+        Instant now=Instant.now(clock);
+        KnowledgeDocumentVersion v=versions.saveAndFlush(KnowledgeDocumentVersion.builder()
+                .document(d).versionNo(previous.getVersionNo()+1)
+                .originalFilename(previous.getOriginalFilename()).mediaType(previous.getMediaType())
+                .storagePath(previous.getStoragePath()).sha256(previous.getSha256())
+                .sizeBytes(previous.getSizeBytes()).status("UPLOADED").createdAt(now).build());
+        d.setStatus("UPLOADED");d.setDuplicateOfDocument(null);d.setUpdatedAt(now);
+        jobs.save(KnowledgeIngestionJob.builder().version(v).status("PENDING").attemptCount(0).nextAttemptAt(now).createdAt(now).updatedAt(now).build());return view(d,true);
+    }
+    @Transactional public void archive(UUID id){
+        KnowledgeDocument d=lockedDocument(id);d.setStatus("ARCHIVED");d.setUpdatedAt(Instant.now(clock));
+        jobs.cancelPending(id);
+        for(KnowledgeDocumentVersion v:versions.findByDocumentDocumentIdOrderByVersionNoDesc(id)){
+            v.setStatus("ARCHIVED");try{qdrant.deleteVersion(v.getVersionId());}catch(RuntimeException ignored){}
+        }
+    }
 
     @Scheduled(fixedDelayString="${app.assistant.ingestion-poll-ms:5000}") @Transactional
-    public void processNext(){if(!properties.isEnabled())return;Optional<KnowledgeIngestionJob> next=jobs.findFirstByStatusAndNextAttemptAtLessThanEqualOrderByCreatedAtAsc("PENDING",Instant.now(clock));if(next.isEmpty())return;KnowledgeIngestionJob job=next.get();KnowledgeDocumentVersion version=job.getVersion();KnowledgeDocument document=version.getDocument();Instant now=Instant.now(clock);job.setStatus("RUNNING");job.setStartedAt(now);job.setAttemptCount(job.getAttemptCount()+1);job.setUpdatedAt(now);document.setStatus("PROCESSING");
+    public void processNext(){if(!properties.isEnabled())return;Optional<KnowledgeIngestionJob> next=jobs.findFirstByStatusAndNextAttemptAtLessThanEqualOrderByCreatedAtAsc("PENDING",Instant.now(clock));if(next.isEmpty())return;KnowledgeIngestionJob job=next.get();KnowledgeDocumentVersion version=job.getVersion();KnowledgeDocument document=lockedDocument(version.getDocument().getDocumentId());
+        // Multiple instances can select the same pending row before the document
+        // lock is acquired. A conditional write prevents a second ingestion.
+        if(jobs.claimPending(job.getIngestionJobId())!=1)return;
+        if("ARCHIVED".equals(document.getStatus())||!latest(document).getVersionId().equals(version.getVersionId())){job.setStatus("FAILED");job.setErrorCode("DOCUMENT_INACTIVE");job.setEndedAt(Instant.now(clock));return;}
+        Instant now=Instant.now(clock);job.setStatus("RUNNING");job.setStartedAt(now);job.setAttemptCount(job.getAttemptCount()+1);job.setUpdatedAt(now);document.setStatus("PROCESSING");
         try{version.setStatus("EXTRACTING");DocumentExtractor.Extracted extracted=extractor.extract(Path.of(version.getStoragePath()),version.getMediaType());version.setStatus(extracted.method().contains("OCR")||"OPENAI_VISION".equals(extracted.method())?"OCR":"CHUNKING");version.setExtractedText(extracted.text());version.setPageCount(extracted.pages());version.setExtractionMethod(extracted.method());
             version.setStatus("CHUNKING");List<KnowledgeChunk> values=chunk(version,extracted.text(),now);chunks.saveAll(values);chunks.flush();version.setStatus("EMBEDDING");for(int start=0;start<values.size();start+=32){List<KnowledgeChunk> batch=values.subList(start,Math.min(start+32,values.size()));List<float[]> vectors=openAi.embeddings(batch.stream().map(KnowledgeChunk::getContent).toList());qdrant.upsert(batch,vectors);}
-            version.setStatus("READY");version.setReadyAt(Instant.now(clock));document.setCurrentVersion(version);document.setStatus("READY");if(document.getReplacesDocument()!=null){KnowledgeDocument old=document.getReplacesDocument();if(old.getCurrentVersion()!=null)try{qdrant.deleteVersion(old.getCurrentVersion().getVersionId());}catch(RuntimeException ignored){}old.setStatus("ARCHIVED");if(old.getCurrentVersion()!=null)old.getCurrentVersion().setStatus("ARCHIVED");}
+            version.setStatus("READY");version.setReadyAt(Instant.now(clock));if(document.getCurrentVersion()!=null&&!document.getCurrentVersion().getVersionId().equals(version.getVersionId())){
+                KnowledgeDocumentVersion previous=document.getCurrentVersion();previous.setStatus("ARCHIVED");try{qdrant.deleteVersion(previous.getVersionId());}catch(RuntimeException ignored){}
+            }
+            document.setCurrentVersion(version);document.setStatus("READY");document.setUpdatedAt(Instant.now(clock));if(document.getReplacesDocument()!=null){KnowledgeDocument old=lockedDocument(document.getReplacesDocument().getDocumentId());if(old.getCurrentVersion()!=null)try{qdrant.deleteVersion(old.getCurrentVersion().getVersionId());}catch(RuntimeException ignored){}old.setStatus("ARCHIVED");if(old.getCurrentVersion()!=null)old.getCurrentVersion().setStatus("ARCHIVED");}
             deduplicate(document);
             job.setStatus("SUCCEEDED");job.setEndedAt(Instant.now(clock));job.setUpdatedAt(job.getEndedAt());
         }catch(Exception e){version.setStatus("FAILED");version.setErrorCode(code(e));version.setErrorMessage(limit(rootMessage(e),1000));document.setStatus("FAILED");job.setStatus("FAILED");job.setErrorCode(version.getErrorCode());job.setErrorMessage(version.getErrorMessage());job.setEndedAt(Instant.now(clock));job.setUpdatedAt(job.getEndedAt());}
@@ -86,7 +164,7 @@ public class KnowledgeAdminService {
     private String lineValue(String block,String marker){return block.lines().filter(l->l.startsWith(marker)).map(l->l.substring(marker.length()).trim()).findFirst().orElse(null);}
     private Integer pageAt(String text,int offset){int p=text.lastIndexOf("[PAGE ",offset);if(p<0)return null;int e=text.indexOf(']',p);try{return Integer.parseInt(text.substring(p+6,e));}catch(Exception ex){return null;}}
     private String heading(String value){int h=value.lastIndexOf("[HEADING] ",Math.min(value.length()-1,300));if(h<0)return null;int e=value.indexOf('\n',h);return limit(value.substring(h+10,e<0?value.length():e).trim(),500);}
-    private DocumentView view(KnowledgeDocument d,boolean withChunks){KnowledgeDocumentVersion v=d.getCurrentVersion();if(v==null)v=versions.findByDocumentDocumentIdOrderByVersionNoDesc(d.getDocumentId()).stream().findFirst().orElse(null);List<ChunkView> cv=withChunks&&v!=null?chunks.findByVersionVersionIdOrderByChunkIndexAsc(v.getVersionId()).stream().map(c->new ChunkView(c.getChunkId(),c.getChunkIndex(),c.getChunkType(),c.getHeading(),c.getLocator(),c.getPageFrom(),c.getPageTo(),c.getContent(),c.getTokenEstimate())).toList():List.of();String preview=v==null||v.getExtractedText()==null?null:limit(v.getExtractedText(),3000);return new DocumentView(d.getDocumentId(),d.getTitle(),d.getCategory(),d.getLanguageCode(),d.getVisibility(),d.getStatus(),d.getReplacesDocument()==null?null:d.getReplacesDocument().getDocumentId(),d.getDuplicateOfDocument()==null?null:d.getDuplicateOfDocument().getDocumentId(),d.getCurrentVersion()==null?null:d.getCurrentVersion().getVersionId(),v==null?null:v.getOriginalFilename(),v==null?null:v.getMediaType(),v==null?null:v.getPageCount(),v==null?null:v.getExtractionMethod(),v==null?null:v.getErrorCode(),v==null?null:v.getErrorMessage(),preview,d.getEffectiveFrom(),d.getEffectiveUntil(),d.getCreatedAt(),d.getUpdatedAt(),cv);}
+    private DocumentView view(KnowledgeDocument d,boolean withChunks){KnowledgeDocumentVersion v=versions.findByDocumentDocumentIdOrderByVersionNoDesc(d.getDocumentId()).stream().findFirst().orElse(null);List<ChunkView> cv=withChunks&&v!=null?chunks.findByVersionVersionIdOrderByChunkIndexAsc(v.getVersionId()).stream().map(c->new ChunkView(c.getChunkId(),c.getChunkIndex(),c.getChunkType(),c.getHeading(),c.getLocator(),c.getPageFrom(),c.getPageTo(),c.getContent(),c.getTokenEstimate())).toList():List.of();String preview=v==null||v.getExtractedText()==null?null:limit(v.getExtractedText(),3000);return new DocumentView(d.getDocumentId(),d.getTitle(),d.getCategory(),d.getLanguageCode(),d.getVisibility(),d.getStatus(),d.getReplacesDocument()==null?null:d.getReplacesDocument().getDocumentId(),d.getDuplicateOfDocument()==null?null:d.getDuplicateOfDocument().getDocumentId(),d.getCurrentVersion()==null?null:d.getCurrentVersion().getVersionId(),v==null?null:v.getOriginalFilename(),v==null?null:v.getMediaType(),v==null?null:v.getPageCount(),v==null?null:v.getExtractionMethod(),v==null?null:v.getErrorCode(),v==null?null:v.getErrorMessage(),preview,d.getEffectiveFrom(),d.getEffectiveUntil(),d.getCreatedAt(),d.getUpdatedAt(),cv);}
 
     @Scheduled(initialDelayString="${app.assistant.dedup-initial-delay-ms:30000}",fixedDelayString="${app.assistant.dedup-poll-ms:86400000}") @Transactional
     public void deduplicateExisting(){if(!properties.isEnabled()||!properties.isAutomaticDeduplicationEnabled())return;for(KnowledgeDocumentVersion version:versions.findByStatusOrderByReadyAtDesc("READY"))deduplicate(version.getDocument());}

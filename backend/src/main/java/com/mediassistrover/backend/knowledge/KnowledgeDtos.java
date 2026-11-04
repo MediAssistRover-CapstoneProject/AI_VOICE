@@ -3,6 +3,8 @@ import java.time.Instant;
 import java.util.*;
 public final class KnowledgeDtos {
     private KnowledgeDtos(){}
+    public record EditRequest(String title,String category,String language,String visibility,String content,UUID expectedVersionId){}
+    public record EditorView(UUID versionId,String content){}
     public record ChunkView(UUID id,int index,String chunkType,String heading,String locator,Integer pageFrom,Integer pageTo,String content,int tokenEstimate){}
     public record DocumentView(UUID id,String title,String category,String language,String visibility,String status,UUID replacesDocumentId,UUID duplicateOfDocumentId,UUID currentVersionId,String filename,String mediaType,Integer pageCount,String extractionMethod,String errorCode,String errorMessage,String preview,Instant effectiveFrom,Instant effectiveUntil,Instant createdAt,Instant updatedAt,List<ChunkView> chunks){}
 }

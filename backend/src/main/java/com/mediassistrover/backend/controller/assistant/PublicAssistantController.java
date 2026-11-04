@@ -5,6 +5,12 @@ import java.util.*;
 @RestController @RequestMapping("/api/v1/public/assistant") @RequiredArgsConstructor
 public class PublicAssistantController {
  private final AssistantService service;
+ private final VoiceSettingsService voiceSettings;
+ private final KioskSpeechService kioskSpeech;
+ public record KioskSpeechRequest(UUID turnId) {}
+ @PostMapping(value="/sessions/{id}/speech",consumes=MediaType.APPLICATION_JSON_VALUE,produces="audio/wav")
+ public ResponseEntity<byte[]> speech(@PathVariable UUID id,@RequestBody KioskSpeechRequest request){return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(kioskSpeech.synthesize(id,request.turnId()));}
+ @GetMapping("/voice-settings") public ResponseEntity<VoiceSettingsService.Settings> voiceSettings(){return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(voiceSettings.current());}
  @GetMapping("/config") public PublicConfigResponse config(@RequestParam(defaultValue="vi-VN")String language){return service.publicConfig(language);}
  @PostMapping("/sessions") @ResponseStatus(HttpStatus.CREATED) public SessionResponse session(@RequestBody CreateSessionRequest r){return service.createPublicSession(r);}
  @PostMapping("/sessions/{id}/turns") public TurnResponse text(@PathVariable UUID id,@RequestHeader(value="Idempotency-Key",required=false)String key,@RequestBody TextTurnRequest r){return service.textTurn(id,r.text(),key,"KIOSK",null);}

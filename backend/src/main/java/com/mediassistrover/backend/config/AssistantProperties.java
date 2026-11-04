@@ -17,7 +17,7 @@ public class AssistantProperties {
     private boolean publicEnabled;
     private boolean voiceActionsEnabled;
     private boolean piBridgeEnabled;
-    private boolean generalKnowledgeEnabled = true;
+    private boolean generalKnowledgeEnabled = false;
     private boolean hybridRetrievalEnabled = true;
     private boolean automaticDeduplicationEnabled = true;
     private String publicRobotIds = "";

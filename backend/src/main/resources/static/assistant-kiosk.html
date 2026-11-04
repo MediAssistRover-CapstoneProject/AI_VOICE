@@ -16,25 +16,13 @@
           <p>Trợ lý thông tin & chỉ đường</p>
         </div>
       </div>
-      <span class="badge">VI · EN</span>
+      <span class="badge">Tiếng Việt</span>
     </header>
     <main class="grid">
       <aside class="card stack">
         <h2>Bắt đầu cuộc trò chuyện</h2>
-        <label
-          >Robot ID<input
-            id="robot"
-            placeholder="UUID robot được cấp phép" /></label
-        ><label
-          >Ngôn ngữ<select id="lang">
-            <option value="vi-VN">Tiếng Việt</option>
-            <option value="en-US">English</option>
-          </select></label
-        ><label
-          >Microphone<select id="micDevice">
-            <option value="">Microphone mặc định</option>
-          </select></label
-        ><button id="permission" class="secondary">Cho phép microphone</button>
+        <p>Bấm <b>Bật voice</b>, rồi nói “hello”, “tôi cần giúp đỡ” hoặc hỏi về bệnh viện.</p>
+        <p>MAR chỉ nghe khi bạn bật voice. Im lặng 5 giây sẽ tạm dừng, không tự phát lời nhắc.</p>
         <div id="sessionState" class="status">Đang khởi tạo…</div>
         <div class="notice">
           Giọng nói được tạo bởi AI. Hệ thống không tư vấn chẩn đoán hoặc điều
@@ -59,10 +47,10 @@
               <div class="robot-mouth"></div>
             </div>
           </div>
-          <strong id="faceStatus">MAR đang khởi tạo</strong>
-          <small id="faceHint">Lần đầu trình duyệt sẽ xin quyền microphone</small>
+          <strong id="faceStatus">Xin chào, tôi là MAR</strong>
+          <small id="faceHint">Bấm Bật voice để bắt đầu bằng tiếng Việt.</small>
         </div>
-<span id="sourceBadge" class="badge" hidden></span><p id="answer" aria-live="polite"></p><div id="actions"></div><button id="mic" disabled>🎙 Bắt đầu thủ công</button><div id="work" role="status"></div>
+<span id="sourceBadge" class="badge" hidden></span><p id="answer" aria-live="polite"></p><div id="actions"></div><button id="mic" disabled>🎙 Bật voice</button><button id="stopVoice" class="secondary">⏹ Dừng giọng nói</button><div id="work" role="status"></div>
       </section>
     </main>
-<script src="/kiosk-voice.js"></script></body></html>
+<script src="/kiosk-voice.js?v=admin-voice-4"></script></body></html>

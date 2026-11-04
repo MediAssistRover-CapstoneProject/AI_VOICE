@@ -24,6 +24,7 @@ import java.util.concurrent.atomic.AtomicReference;
 public class OpenAiGateway {
     private final AssistantProperties properties;
     private final ObjectMapper json;
+    private final VoiceSettingsService voiceSettings;
     private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
 
     public String transcribe(byte[] audio, String filename) {
@@ -81,24 +82,36 @@ public class OpenAiGateway {
     }
 
     public byte[] synthesizeWav(String text, String language) {
+        return synthesizeWav(text, language, voiceSettings.current());
+    }
+
+    public byte[] synthesizeWav(String text, String language, VoiceSettingsService.Settings voice) {
+        return synthesizeWav(text, language, voice, properties.getTtsModel());
+    }
+
+    public byte[] synthesizeWav(String text, String language, VoiceSettingsService.Settings voice, String model) {
         requireConfigured();
+        if (voice == null || voice.cloudVoice() == null || !VoiceSettingsService.VOICES.contains(voice.cloudVoice())
+                || !Double.isFinite(voice.rate()) || voice.rate() < 0.25 || voice.rate() > 1.5)
+            throw new IllegalArgumentException("Invalid realtime voice configuration");
         ByteArrayOutputStream pcm=new ByteArrayOutputStream(); CountDownLatch done=new CountDownLatch(1);
         AtomicReference<Throwable> failure=new AtomicReference<>();
+        WebSocket ws = null;
         try {
             WebSocket.Listener listener=new WebSocket.Listener(){
                 private final StringBuilder messages=new StringBuilder();
-                @Override public CompletionStage<?> onText(WebSocket ws,CharSequence data,boolean last){messages.append(data);if(last){try{JsonNode event=json.readTree(messages.toString());String type=event.path("type").asText();if(type.equals("response.output_audio.delta")||type.equals("response.audio.delta")){byte[] chunk=Base64.getDecoder().decode(event.path("delta").asText());pcm.write(chunk);}else if(type.equals("response.done")){done.countDown();}else if(type.equals("error")){failure.set(new IllegalStateException(event.path("error").path("message").asText("Realtime TTS error")));done.countDown();}}catch(Exception e){failure.set(e);done.countDown();}messages.setLength(0);}ws.request(1);return null;}
+                @Override public CompletionStage<?> onText(WebSocket ws,CharSequence data,boolean last){messages.append(data);if(last){try{JsonNode event=json.readTree(messages.toString());String type=event.path("type").asText();if(type.equals("response.output_audio.delta")||type.equals("response.audio.delta")){byte[] chunk=Base64.getDecoder().decode(event.path("delta").asText());if(pcm.size()+chunk.length>4*1024*1024-44)throw new IllegalStateException("TTS_AUDIO_TOO_LARGE");pcm.write(chunk);}else if(type.equals("response.done")){if(!"completed".equals(event.path("response").path("status").asText()))failure.compareAndSet(null,new IllegalStateException("TTS_RESPONSE_INCOMPLETE"));done.countDown();}else if(type.equals("error")){failure.set(new IllegalStateException(event.path("error").path("message").asText("Realtime TTS error")));done.countDown();}}catch(Exception e){failure.set(e);done.countDown();}messages.setLength(0);}ws.request(1);return null;}
                 @Override public void onError(WebSocket ws,Throwable error){failure.set(error);done.countDown();}
-                @Override public CompletionStage<?> onClose(WebSocket ws,int status,String reason){done.countDown();return null;}
+                @Override public CompletionStage<?> onClose(WebSocket ws,int status,String reason){if(done.getCount()>0)failure.compareAndSet(null,new IllegalStateException("TTS_CONNECTION_CLOSED"));done.countDown();return null;}
             };
-            WebSocket ws=http.newWebSocketBuilder().connectTimeout(Duration.ofSeconds(10))
+            ws=http.newWebSocketBuilder().connectTimeout(Duration.ofSeconds(10))
                     .header("Authorization","Bearer "+properties.getOpenaiApiKey())
-                    .buildAsync(URI.create("wss://api.openai.com/v1/realtime?model="+properties.getTtsModel()),listener).join();
+                    .buildAsync(URI.create("wss://api.openai.com/v1/realtime?model="+model),listener).join();
             ws.request(1);
             ObjectNode session=json.createObjectNode().put("type","session.update"); ObjectNode s=session.putObject("session");
-            s.put("type","realtime").put("instructions","Read only the supplied text in clear "+(language.startsWith("vi")?"Vietnamese":"English")+". Do not add words.");
+            s.put("type","realtime").put("instructions","Read only the supplied text in clear "+(language.startsWith("vi")?"Vietnamese":"English")+". Do not add words. "+voice.instructions());
             s.putArray("output_modalities").add("audio"); ObjectNode audioOutput=s.putObject("audio").putObject("output");
-            audioOutput.putObject("format").put("type","audio/pcm").put("rate",24000);audioOutput.put("voice",properties.getTtsVoice());
+            audioOutput.putObject("format").put("type","audio/pcm").put("rate",24000);audioOutput.put("voice",voice.cloudVoice()).put("speed",voice.rate());
             ws.sendText(session.toString(),true).join();
             ObjectNode item=json.createObjectNode().put("type","conversation.item.create"); ObjectNode i=item.putObject("item").put("type","message").put("role","user");
             i.putArray("content").addObject().put("type","input_text").put("text",text);
@@ -110,7 +123,9 @@ public class OpenAiGateway {
             if(failure.get()!=null)throw new CompletionException(failure.get());
             if(pcm.size()==0)throw new IllegalStateException("Realtime TTS returned no audio");
             return wav(pcm.toByteArray(),24000,1,16);
-        } catch(Exception e){throw new IllegalStateException("OPENAI_REALTIME_TTS_FAILED",e);}
+        } catch(InterruptedException e){Thread.currentThread().interrupt();throw new IllegalStateException("OPENAI_REALTIME_TTS_INTERRUPTED",e);}
+        catch(Exception e){throw new IllegalStateException("OPENAI_REALTIME_TTS_FAILED",e);}
+        finally {if(ws!=null)ws.abort();}
     }
 
     private JsonNode postJson(String url,byte[] body,String contentType,Duration timeout){

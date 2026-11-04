@@ -92,19 +92,77 @@ class AssistantServiceTest {
         });
         when(properties.sessionTtl()).thenReturn(java.time.Duration.ofMinutes(30));
         var response=service.textTurn(id,"Giá cổ phiếu hôm nay?","no-source","KIOSK",null);
-        assertThat(response.answer()).isEqualTo("Tôi không trả lời thông tin này được.");
+        assertThat(response.answer()).isEqualTo("Câu hỏi này nằm ngoài phạm vi hỗ trợ của tôi. Tôi chỉ hỗ trợ thông tin có trong tài liệu bệnh viện.");
         assertThat(response.status()).isEqualTo("READY");
         verifyNoInteractions(openAi);
     }
 
+    private UUID setupTurn() {
+        UUID id=UUID.randomUUID();
+        VoiceInteraction session=VoiceInteraction.builder().voiceInteractionId(id).channel("KIOSK")
+            .languageCode("vi-VN").visibilityScope("PUBLIC").status(VoiceInteractionStatus.ACTIVE)
+            .expiresAt(Instant.parse("2026-10-30T10:30:00Z")).build();
+        when(sessions.findById(id)).thenReturn(Optional.of(session));
+        when(turns.saveAndFlush(any())).thenAnswer(call->{VoiceAssistantTurn t=call.getArgument(0);t.setTurnId(UUID.randomUUID());return t;});
+        when(properties.sessionTtl()).thenReturn(java.time.Duration.ofMinutes(30));
+        return id;
+    }
+
+    private KnowledgeRetrievalService.Source hospitalSource() {
+        return new KnowledgeRetrievalService.Source("S1","DOCUMENT",UUID.randomUUID(),null,UUID.randomUUID(),
+            "Sổ tay bệnh viện","Trang 1","Nhà thuốc ở tầng một.","hash",0.9,null);
+    }
+
     @Test
-    void generalKnowledgeHasMandatoryWarningAndSpokenDisclaimerWithoutHospitalCitation() throws Exception {
-        UUID id=UUID.randomUUID();VoiceInteraction session=VoiceInteraction.builder().voiceInteractionId(id).channel("KIOSK").languageCode("vi-VN").visibilityScope("PUBLIC").status(VoiceInteractionStatus.ACTIVE).expiresAt(Instant.parse("2026-10-30T10:30:00Z")).build();
-        when(sessions.findById(id)).thenReturn(Optional.of(session));when(turns.saveAndFlush(any())).thenAnswer(call->{VoiceAssistantTurn turn=call.getArgument(0);turn.setTurnId(UUID.randomUUID());return turn;});when(properties.sessionTtl()).thenReturn(java.time.Duration.ofMinutes(30));when(properties.isGeneralKnowledgeEnabled()).thenReturn(true);when(properties.getResponseModel()).thenReturn("test-model");
-        var modelResult=json.readTree("""
-          {"intent":"INFORMATION","answer":"Albert Einstein là một nhà vật lý.","speech_text":"Albert Einstein là một nhà vật lý.","language":"vi-VN","grounding_mode":"GENERAL","destination":"","confirmation_required":false,"warnings":[],"used_source_ids":[]}
-          """);when(openAi.answer(anyString(),anyString(),any())).thenReturn(modelResult);
+    void oldGeneralKnowledgeSettingCannotEnableOutOfScopeAnswers() {
+        UUID id=setupTurn();
+        lenient().when(properties.isGeneralKnowledgeEnabled()).thenReturn(true);
         var response=service.textTurn(id,"Albert Einstein là ai?","general","KIOSK",null);
-        assertThat(response.groundingMode()).isEqualTo("GENERAL");assertThat(response.citations()).isEmpty();assertThat(response.warnings()).contains("GENERAL_KNOWLEDGE_NOT_HOSPITAL");assertThat(response.speechText()).startsWith("Đây là kiến thức chung, không phải thông tin chính thức của bệnh viện.");
+        assertThat(response.answer()).contains("ngoài phạm vi hỗ trợ");
+        assertThat(response.warnings()).contains("OUTSIDE_HOSPITAL_SCOPE");
+        verifyNoInteractions(openAi);
+    }
+
+    @Test
+    void unrelatedSourcesDoNotPermitGeneralKnowledge() throws Exception {
+        UUID id=setupTurn();
+        when(retrieval.retrieve(anyString(),anyString(),anyBoolean())).thenReturn(List.of(hospitalSource()));
+        when(openAi.answer(anyString(),anyString(),any())).thenReturn(new ObjectMapper().readTree("""
+          {"intent":"INFORMATION","answer":"Einstein là nhà vật lý.","speech_text":"Einstein là nhà vật lý.",
+           "language":"en-US","grounding_mode":"GENERAL","used_source_ids":[]}
+          """));
+        var response=service.textTurn(id,"Einstein là ai?","unrelated","KIOSK",null);
+        assertThat(response.answer()).contains("ngoài phạm vi hỗ trợ");
+        assertThat(response.speechText()).isEqualTo(response.answer());
+        assertThat(response.language()).isEqualTo("vi-VN");
+        verify(citations,never()).save(any());
+    }
+
+    @Test
+    void inventedCitationCannotAuthorizeHospitalAnswerOrAction() throws Exception {
+        UUID id=setupTurn();
+        when(retrieval.retrieve(anyString(),anyString(),anyBoolean())).thenReturn(List.of(hospitalSource()));
+        when(openAi.answer(anyString(),anyString(),any())).thenReturn(new ObjectMapper().readTree("""
+          {"intent":"ESCORT","answer":"Đi theo tôi.","grounding_mode":"HOSPITAL","used_source_ids":["FAKE"]}
+          """));
+        var response=service.textTurn(id,"Dẫn đường","fake-citation","KIOSK",null);
+        assertThat(response.answer()).contains("ngoài phạm vi hỗ trợ");
+        assertThat(response.actionPreview()).isNull();
+        verifyNoInteractions(requestService,emergencyService);
+    }
+
+    @Test
+    void supportedAnswerKeepsItsRealSource() throws Exception {
+        UUID id=setupTurn();
+        when(retrieval.retrieve(anyString(),anyString(),anyBoolean())).thenReturn(List.of(hospitalSource()));
+        when(openAi.answer(anyString(),anyString(),any())).thenReturn(new ObjectMapper().readTree("""
+          {"intent":"INFORMATION","answer":"Nhà thuốc ở tầng một.","speech_text":"Nhà thuốc ở tầng một.",
+           "language":"vi-VN","grounding_mode":"HOSPITAL","used_source_ids":["S1"]}
+          """));
+        var response=service.textTurn(id,"Nhà thuốc ở đâu?","supported","KIOSK",null);
+        assertThat(response.answer()).isEqualTo("Nhà thuốc ở tầng một.");
+        assertThat(response.groundingMode()).isEqualTo("HOSPITAL");
+        verify(citations).save(any());
+        verify(openAi,never()).synthesizeWav(anyString(),anyString());
     }
 }

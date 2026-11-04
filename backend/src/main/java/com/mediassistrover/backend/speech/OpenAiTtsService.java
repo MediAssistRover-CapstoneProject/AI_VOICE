@@ -2,6 +2,7 @@ package com.mediassistrover.backend.speech;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mediassistrover.backend.assistant.OpenAiGateway;
+import com.mediassistrover.backend.assistant.VoiceSettingsService;
 import jakarta.annotation.PreDestroy;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -26,6 +27,8 @@ public class OpenAiTtsService implements AutoCloseable {
     private final Path directory;
     private final URI endpoint;
     private final OpenAiGateway realtimeGateway;
+    @org.springframework.beans.factory.annotation.Autowired(required=false)
+    private VoiceSettingsService voiceSettings;
     private final ObjectMapper json;
     private final HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5))
         .followRedirects(HttpClient.Redirect.NEVER).build();
@@ -65,8 +68,10 @@ public class OpenAiTtsService implements AutoCloseable {
         if(text==null||text.isBlank()||text.length()<1||text.length()>500)
             return new Result("FAILED","TTS_TEXT_INVALID",null);
         if(speedWpm<80||speedWpm>220)return new Result("FAILED","TTS_SPEED_INVALID",null);
-        double renderSpeed=Math.max(0.25,Math.min(4.0,speed*speedWpm/150.0));
-        String id=sha256(("openai\n"+model+"\n"+voice+"\n"+renderSpeed+"\n"+language+"\n"+instructions+"\n"+text).getBytes(StandardCharsets.UTF_8));
+        var setting=voiceSettings==null?new VoiceSettingsService.Settings("CUSTOM",voice,"CALM",speed,"",0):voiceSettings.current();
+        double renderSpeed=Math.max(0.25,Math.min(model.startsWith("gpt-realtime")?1.5:4.0,setting.rate()*speedWpm/150.0));
+        var snapshot=new VoiceSettingsService.Settings(setting.profile(),setting.cloudVoice(),setting.style(),renderSpeed,setting.browserVoiceUri(),setting.kioskEngine(),setting.revision());
+        String id=sha256(("openai\n"+model+"\n"+snapshot.cloudVoice()+"\n"+renderSpeed+"\n"+language+"\n"+snapshot.instructions()+"\n"+instructions+"\n"+text).getBytes(StandardCharsets.UTF_8));
         Path file=directory.resolve(id+".wav");
         try {
             if(Files.isRegularFile(file)) {
@@ -83,23 +88,23 @@ public class OpenAiTtsService implements AutoCloseable {
             pending.entrySet().removeIf(e->e.getValue().future.isDone()&&now-e.getValue().created>180_000);
             if(work==null) {
                 if(pending.size()>=128)return new Result("FAILED","TTS_BUSY",null);
-                try {pending.put(id,new Work(executor.submit(()->generate(text,language,file,renderSpeed)),now));}
+                try {pending.put(id,new Work(executor.submit(()->generate(text,language,file,snapshot)),now));}
                 catch(RejectedExecutionException e){return new Result("FAILED","TTS_BUSY",null);}
             }
             return new Result("PENDING",null,null);
         } catch(IOException e){return new Result("FAILED","TTS_CACHE_ERROR",null);}
     }
-    private byte[] generate(String text,String language,Path file,double renderSpeed) throws Exception {
+    private byte[] generate(String text,String language,Path file,VoiceSettingsService.Settings snapshot) throws Exception {
         if(model.startsWith("gpt-realtime")){
             if(realtimeGateway==null)throw new IOException("TTS_REALTIME_GATEWAY_UNAVAILABLE");
-            byte[] bytes=realtimeGateway.synthesizeWav(text,language);
+            byte[] bytes=realtimeGateway.synthesizeWav(text,language,snapshot,model);
             if(!wav(bytes))throw new IOException("TTS_INVALID_WAV");
             Files.createDirectories(directory);Path temporary=Files.createTempFile(directory,"tts-",".tmp");
             try{Files.write(temporary,bytes);Files.move(temporary,file,StandardCopyOption.REPLACE_EXISTING);}finally{Files.deleteIfExists(temporary);}trimCache();return bytes;
         }
-        var body=json.createObjectNode().put("model",model).put("voice",voice).put("input",text)
-            .put("response_format","wav").put("speed",renderSpeed);
-        if(!Set.of("tts-1","tts-1-hd").contains(model))body.put("instructions",language.equals("vi")?instructions:"Speak clearly in English. Read only the supplied text.");
+        var body=json.createObjectNode().put("model",model).put("voice",snapshot.cloudVoice()).put("input",text)
+            .put("response_format","wav").put("speed",snapshot.rate());
+        if(!Set.of("tts-1","tts-1-hd").contains(model))body.put("instructions","Read only the supplied text clearly in "+(language.equals("vi")?"Vietnamese. ":"English. ")+snapshot.instructions());
         var request=HttpRequest.newBuilder(endpoint).timeout(Duration.ofSeconds(60))
             .header("Authorization","Bearer "+apiKey).header("Content-Type","application/json")
             .POST(HttpRequest.BodyPublishers.ofByteArray(json.writeValueAsBytes(body))).build();
