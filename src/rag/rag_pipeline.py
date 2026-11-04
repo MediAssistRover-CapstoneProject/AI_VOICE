@@ -49,6 +49,10 @@ class HospitalRAGPipeline:
         self.openai_api_key = openai_api_key
         self.gemini_api_key = gemini_api_key
         self.llm_model = llm_model
+        self._local_llm = None
+        if self.llm_provider == "ollama":
+            from src.local_providers import Ollama
+            self._local_llm = Ollama()
         self.top_k = top_k
         self.score_threshold = score_threshold
         self._answer_cache = OrderedDict()
@@ -138,6 +142,9 @@ class HospitalRAGPipeline:
     def _generate_answer(self, question: str, context: str) -> str:
         """Call LLM or offline generator with augmented context."""
         system_content = HOSPITAL_RAG_SYSTEM_PROMPT.format(context=context)
+
+        if self._local_llm is not None:
+            return self._local_llm.answer(question, system_content)
 
         # Option A: OpenAI
         if self.llm_provider == "openai" and self.openai_api_key:

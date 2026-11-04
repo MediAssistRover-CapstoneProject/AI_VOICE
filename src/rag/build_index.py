@@ -116,7 +116,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Build Hospital Vector DB ('Vector P')")
     parser.add_argument("--docs", default=str(ROOT / "data" / "documents"), help="Path to documents folder")
     parser.add_argument("--output", default=str(ROOT / "data" / "hospital_vector_store.json"), help="Output JSON path")
-    parser.add_argument("--embeddings", default=os.getenv("EMBEDDING_PROVIDER", "local"), choices=["local", "openai", "gemini"])
+    parser.add_argument("--embeddings", default=os.getenv("EMBEDDING_PROVIDER", "local"), choices=["local", "openai", "gemini", "semantic"])
     parser.add_argument("--no-backend", action="store_true", help="Skip syncing from backend MySQL")
     args = parser.parse_args()
 

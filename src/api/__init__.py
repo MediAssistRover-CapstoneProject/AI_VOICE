@@ -5,6 +5,9 @@ authentication contract of PiVoiceController and PiAuthController.
 """
 from __future__ import annotations
 
+import ssl
+import os
+import uuid
 import time
 import logging
 from typing import Any
@@ -23,6 +26,7 @@ class BackendClient:
         robot_code: str,
         device_secret: str,
         timeout: float = 30.0,
+        ca_cert_path: str | None = None,
     ) -> None:
         self._base = base_url.rstrip("/")
         self._robot_code = robot_code
@@ -37,6 +41,7 @@ class BackendClient:
             base_url=self._base,
             timeout=httpx.Timeout(timeout),
             follow_redirects=False,
+            verify=ssl.create_default_context(cafile=ca_cert_path or os.getenv("BACKEND_CA_CERT") or None),
         )
 
     # ------------------------------------------------------------------
@@ -86,7 +91,9 @@ class BackendClient:
         return resp
 
     def post(self, path: str, **kwargs: Any) -> httpx.Response:
-        resp = self._client.post(path, headers=self._headers(), **kwargs)
+        headers = self._headers()
+        headers.update(kwargs.pop("headers", {}))
+        resp = self._client.post(path, headers=headers, **kwargs)
         resp.raise_for_status()
         return resp
 
@@ -174,10 +181,16 @@ class BackendClient:
         data = resp.json()
         return data.get("content", data) if isinstance(data, dict) else data
 
-    def request_escort(self, map_id: str, endpoint_id: str) -> dict:
+    def get_room_endpoints(self, room_id: str) -> list[dict]:
+        resp = self._client.get("/api/v1/public/endpoints", params={"roomId": room_id, "size": 100})
+        resp.raise_for_status()
+        return resp.json().get("content", [])
+
+    def request_escort(self, map_id: str, endpoint_id: str, idempotency_key: str | None = None) -> dict:
         """POST /api/v1/pi/requests/escort"""
         resp = self.post(
             "/api/v1/pi/requests/escort",
+            headers={"Idempotency-Key": idempotency_key or str(uuid.uuid4())},
             json={
                 "mapId": map_id,
                 "destinationEndpointId": endpoint_id,
@@ -189,6 +202,12 @@ class BackendClient:
             },
         )
         return resp.json()
+
+    def request_sos(self) -> dict:
+        from src.utils.envelope import build_envelope
+        envelope = build_envelope(robot_id=self.robot_id, message_type="EMERGENCY_SOS",
+            payload={"severity": "CRITICAL", "description": "SOS requested by voice"})
+        return self.post("/api/v1/pi/incidents/sos", json=envelope).json()
 
     def close(self) -> None:
         self._client.close()

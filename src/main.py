@@ -51,7 +51,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--stt", default=os.getenv("STT_PROVIDER", "whisper"),
-        choices=["whisper", "google"],
+        choices=["whisper", "google", "local"],
         help="Speech-to-Text provider"
     )
     parser.add_argument(

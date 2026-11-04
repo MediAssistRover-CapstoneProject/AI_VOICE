@@ -9,6 +9,7 @@ The engine is designed to run on:
 from __future__ import annotations
 
 import json
+import os
 import logging
 import time
 from pathlib import Path
@@ -86,17 +87,17 @@ class VoiceEngine:
 
         # Hospital RAG Pipeline & Vector Database ('Vector P')
         embeddings = create_embeddings(
-            provider=self._config.get("rag", {}).get("embedding_provider", "local"),
+            provider=os.getenv("EMBEDDING_PROVIDER", self._config.get("rag", {}).get("embedding_provider", "local")),
             openai_api_key=openai_api_key,
             gemini_api_key=self._config.get("rag", {}).get("gemini_api_key", ""),
         )
         self._vector_store = HospitalVectorStore(
             embeddings=embeddings,
-            persist_path=VECTOR_DB_PATH,
+            persist_path=os.getenv("VECTOR_DB_PATH", str(VECTOR_DB_PATH)),
         )
         self._rag = HospitalRAGPipeline(
             vector_store=self._vector_store,
-            llm_provider=self._config.get("rag", {}).get("llm_provider", "openai" if openai_api_key else "offline"),
+            llm_provider=os.getenv("LLM_PROVIDER", self._config.get("rag", {}).get("llm_provider", "openai" if openai_api_key else "offline")),
             openai_api_key=openai_api_key,
             gemini_api_key=self._config.get("rag", {}).get("gemini_api_key", ""),
             llm_model=intent_cfg.get("llm_model", "gpt-4o-mini"),
@@ -218,6 +219,20 @@ class VoiceEngine:
 
     def _dispatch_intent(self, intent: IntentResult) -> str:
         """Route an intent to the appropriate handler and return response text."""
+        pending = getattr(self, "_pending_escort", None)
+        if pending:
+            self._pending_escort = None
+            text = intent.raw_text.strip().casefold().rstrip(".!?")
+            if text in {"xác nhận", "đồng ý"} and time.monotonic() - pending[3] <= 60:
+                try:
+                    receipt = self._backend.request_escort(*pending[:3])
+                    if receipt.get("request", {}).get("serviceRequestId"):
+                        return "Hệ thống đã tiếp nhận yêu cầu dẫn đường. Vui lòng chờ robot sẵn sàng."
+                except Exception:
+                    log.warning("[ESCORT] No backend receipt")
+                return "Chưa xác nhận được yêu cầu dẫn đường. Vui lòng nhờ nhân viên hỗ trợ."
+            if text in {"hủy", "không"}:
+                return "Đã hủy yêu cầu dẫn đường."
         handlers = {
             "GREETING": self._handle_greeting,
             "FAREWELL": self._handle_farewell,
@@ -274,48 +289,32 @@ class VoiceEngine:
                 "và Quầy Tiếp đón."
             )
 
-        # Map room code to display name
-        room_names = {
-            "P_CAP_CUU": "Phòng Cấp cứu",
-            "P_KHAM_NOI_01": "Phòng khám Nội 01",
-            "P_KHAM_NGOAI_02": "Phòng khám Ngoại 02",
-            "P_NHA_THUOC": "Nhà thuốc bệnh viện",
-            "P_XET_NGHIEM": "Phòng Xét nghiệm",
-            "P_TIEP_DON": "Quầy Tiếp đón",
-        }
-        display_name = room_names.get(destination, destination)
-
-        # Try to create an escort request via the backend
+        if not self._config.get("voice_actions_enabled", False):
+            return "Chức năng dẫn đường chưa được bật. Vui lòng nhờ nhân viên hỗ trợ."
         try:
-            rooms = self._get_rooms()
-            target_room = next(
-                (r for r in rooms if r.get("roomCode") == destination), None
-            )
-            if target_room and target_room.get("endpointId"):
-                # TODO: Get actual mapId from the backend context
-                log.info("[ENGINE] Creating escort request to %s", destination)
-                confirm = self._escort_prompts.get("confirm", "").format(
-                    destination=display_name
-                )
-                return confirm or f"Vâng, tôi sẽ dẫn bạn đến {display_name}. Vui lòng đi theo tôi."
-        except Exception as exc:
-            log.warning("[ENGINE] Escort request failed: %s", exc)
-
-        return (
-            f"Bạn muốn đến {display_name} phải không ạ? "
-            f"Vui lòng đi theo tôi, tôi sẽ dẫn bạn đến đó."
-        )
+            matches = [r for r in self._backend.get_rooms() if r.get("roomCode") == destination]
+            if len(matches) != 1:
+                return "Chưa xác định được điểm đến trên bản đồ. Vui lòng nhờ nhân viên hỗ trợ."
+            room = matches[0]
+            points = self._backend.get_room_endpoints(room["roomId"])
+            if len(points) != 1 or not points[0].get("mapId") or not points[0].get("endpointId"):
+                return "Điểm đến chưa rõ ràng. Vui lòng nhờ nhân viên hỗ trợ."
+            import uuid
+            self._pending_escort = (points[0]["mapId"], points[0]["endpointId"], str(uuid.uuid4()), time.monotonic())
+            return "Bạn có muốn tôi dẫn đến " + room.get("roomName", destination) + " không? Hãy nói xác nhận hoặc hủy."
+        except Exception:
+            return "Không thể lấy thông tin dẫn đường. Vui lòng nhờ nhân viên hỗ trợ."
 
     def _handle_sos(self, intent: IntentResult) -> str:
-        """Handle emergency SOS – critical priority."""
-        log.warning("[ENGINE] ⚠️ EMERGENCY SOS TRIGGERED by voice: '%s'", intent.raw_text)
-        # The actual SOS incident creation should happen via PiVoiceController
-        # or the existing SOS mechanism on the Robot App
-        return (
-            "Đã kết nối với đội cấp cứu! Xin giữ bình tĩnh, "
-            "đội ngũ y tế đang trên đường đến hỗ trợ bạn. "
-            "Tôi sẽ ở đây cùng bạn cho đến khi nhân viên y tế đến."
-        )
+        if not self._config.get("voice_actions_enabled", False):
+            return "Chưa bật gửi SOS. Hãy gọi ngay nhân viên y tế gần nhất."
+        try:
+            result = self._backend.request_sos()
+            if result.get("incident", {}).get("incidentId") and result.get("serviceRequestId"):
+                return "Hệ thống đã tiếp nhận yêu cầu SOS. Hãy gọi thêm nhân viên y tế gần nhất."
+        except Exception:
+            log.warning("[SOS] No backend receipt")
+        return "Chưa xác nhận được việc gửi SOS. Hãy gọi ngay nhân viên y tế gần nhất."
 
     def _handle_unknown(self, intent: IntentResult) -> str:
         return self._handle_query(intent)

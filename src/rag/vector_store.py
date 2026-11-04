@@ -155,6 +155,7 @@ class HospitalVectorStore:
         path.parent.mkdir(parents=True, exist_ok=True)
         data = {
             "version": "1.0",
+            "embedding_identity": getattr(self.embeddings, "identity", type(self.embeddings).__name__),
             "count": len(self.points),
             "points": [asdict(pt) for pt in self.points],
         }
@@ -170,6 +171,10 @@ class HospitalVectorStore:
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
 
+        expected = getattr(self.embeddings, "identity", type(self.embeddings).__name__)
+        actual = data.get("embedding_identity")
+        if (actual is not None and actual != expected) or (actual is None and hasattr(self.embeddings, "identity")):
+            raise ValueError("Embedding model mismatch: rebuild index into a new file")
         self.points = [
             VectorPoint(
                 id=item["id"],

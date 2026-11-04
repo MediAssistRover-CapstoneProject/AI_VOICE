@@ -1,0 +1,5 @@
+# Optional: install on the inference laptop, not on the navigation Pi.
+-r requirements.txt
+faster-whisper>=1.1,<2
+sentence-transformers>=3,<6
+piper-tts>=1.3,<2

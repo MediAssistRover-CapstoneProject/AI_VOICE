@@ -56,3 +56,9 @@ htmlcov/
 *.swo
 .DS_Store
 Thumbs.db
+
+# Unified runtime environments and private vision diagnostics
+.venv-*/
+data/vision/
+logs/
+evaluation_output/

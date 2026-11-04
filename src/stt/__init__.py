@@ -103,6 +103,9 @@ class GoogleSTT(STTBase):
 
 def create_stt(provider: str, **kwargs) -> STTBase:
     """Factory to create the appropriate STT implementation."""
+    if provider.lower() == "local":
+        from src.local_providers import LocalWhisper
+        return LocalWhisper()
     if provider.lower() == "whisper":
         return WhisperSTT(
             api_key=kwargs.get("api_key", ""),

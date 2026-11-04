@@ -144,6 +144,9 @@ def create_embeddings(
 ) -> BaseEmbeddings:
     """Factory for selecting the embedding model."""
     prov = provider.lower()
+    if prov == "semantic":
+        from src.local_providers import SemanticEmbeddings
+        return SemanticEmbeddings()
     if prov == "openai" and openai_api_key:
         log.info("[EMBEDDINGS] Using OpenAI text-embedding-3-small")
         return OpenAIEmbeddings(api_key=openai_api_key)
