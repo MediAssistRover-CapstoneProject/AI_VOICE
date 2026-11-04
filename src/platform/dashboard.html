@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="vi"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MediAssist — Voice và Vision</title>
+<style>body{font:16px/1.6 system-ui,sans-serif;margin:0;background:#f6f8fa;color:#18212b}main{max-width:900px;margin:48px auto;padding:0 24px}h1{font-size:28px;margin-bottom:4px}h2{font-size:20px}p{color:#4d5a68}a{color:#125d91}nav{display:flex;gap:18px;flex-wrap:wrap;margin:28px 0}section{border-top:1px solid #d7dce1;padding-top:20px}li{margin:12px 0}.note{background:#eaf1f7;padding:14px 18px}code{font-size:14px}</style>
+<main><h1>MediAssist</h1><p>Điều khiển chung AI Voice, AI té ngã và Backend.</p>
+<p id="profile">Đang đọc trạng thái tiến trình...</p>
+<nav id="links"></nav>
+<section><h2>Thành phần đang chạy</h2><ul id="services"></ul></section>
+<p class="note">Trạng thái tiến trình cho biết chương trình còn chạy, chưa xác nhận model hoặc database đã sẵn sàng. Mở từng thành phần để xem chi tiết. Camera thấp vẫn cần được đánh giá bằng video thực tế.</p>
+<p id="error" role="status"></p></main>
+<script>
+function link(parent,label,url){if(!/^https?:\/\//.test(url))return;const a=document.createElement('a');a.textContent=label;a.href=url;a.target='_blank';a.rel='noopener';parent.appendChild(a)}
+async function refresh(){try{const r=await fetch('/api/system',{cache:'no-store'});if(!r.ok)throw new Error('HTTP '+r.status);const d=await r.json();document.getElementById('profile').textContent=d.profile==='local'?'Chế độ local: Vision không gửi sự kiện về BE.':'Chế độ integrated: xem nhãn mô phỏng/live tại màn hình Vision.';const links=document.getElementById('links');links.replaceChildren();link(links,'Kiosk hội thoại',d.links.kiosk);link(links,'Trang staff Backend',d.links.staff);const list=document.getElementById('services');list.replaceChildren();for(const s of d.services){const li=document.createElement('li');li.append(document.createTextNode(s.name+' — '+s.state+' '));link(li,'Mở',s.url);list.appendChild(li)}document.getElementById('error').textContent=''}catch(e){document.getElementById('error').textContent='Không đọc được trạng thái hệ thống: '+e.message}}
+refresh();setInterval(refresh,3000);
+</script></html>

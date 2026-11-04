@@ -1,0 +1,8 @@
+{
+  "backend_url": "http://localhost:8080",
+  "robot_code": "ROBOT_MAR_01",
+  "dashboard": {"host": "127.0.0.1", "port": 7800},
+  "voice": {"enabled": true, "python": "auto", "host": "127.0.0.1", "port": 7860},
+  "vision": {"enabled": true, "python": "auto", "host": "127.0.0.1", "port": 8001, "source": "0", "mode": "lower_body", "model": "models/vision/yolov8n-pose.onnx"},
+  "backend": {"compose_file": "backend/compose.yaml"}
+}

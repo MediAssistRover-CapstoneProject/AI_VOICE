@@ -1,4 +1,39 @@
-# 🎙️ MediAssistRover AI Voice Assistant (AI_VOICE)
+# MediAssistRover — AI Voice + AI té ngã + Backend
+
+> Hệ thống hợp nhất tại `D:\AI_VOic22222`. Hướng dẫn chính: [UNIFIED_SYSTEM_GUIDE.md](docs/UNIFIED_SYSTEM_GUIDE.md).
+> Lưu trữ và báo staff: [VISION_STORAGE_AND_DELIVERY.md](docs/VISION_STORAGE_AND_DELIVERY.md).
+
+```text
+AI_VOic22222/
+├── src/
+│   ├── main.py, voice_engine.py, audio/, stt/, intent/, rag/, tts/, web/  # Voice
+│   ├── vision/
+│   │   ├── core/           # Pose, theo dõi, detector toàn thân/thân dưới
+│   │   ├── integration/    # Device JWT REST, SQLite outbox, receipt
+│   │   ├── web/            # Camera dashboard
+│   │   └── tools/          # Đánh giá video, camera streamer
+│   └── platform/           # Khởi chạy và trang mở chung
+├── backend/                # API, MySQL, Voice, Vision, trang staff
+├── config/                 # voice_config.json và system.json
+├── models/vision/          # Trọng số nhận diện
+├── data/                   # Kiến thức Voice và runtime Vision riêng
+├── mentorpi_ws/            # Cầu nối ROS 2 hiện có
+├── tests/                  # Voice + Vision + launcher
+├── run_system.ps1          # Một lệnh khởi chạy
+└── setup_system.ps1        # Cài hai môi trường Python riêng
+```
+
+```powershell
+.\run_system.ps1 -Check
+.\run_system.ps1 -Profile local -Source "0"
+```
+
+Trang mở chung: http://127.0.0.1:7800. Integrated dùng chung Backend và danh tính
+thiết bị; mặc định chỉ gửi quan sát mô phỏng. Mô hình té ngã chưa được train lại
+cho camera thấp; tích hợp không có nghĩa đã đạt độ chính xác vận hành.
+
+Phần bên dưới giữ tài liệu Voice chi tiết và các lệnh cũ để tương thích.
+
 
 > **Phân hệ Trợ lý Giọng nói Tiếng Việt thông minh cho Robot Bệnh viện MediAssistRover**  
 > Tích hợp trực tiếp với cơ sở dữ liệu bệnh viện (`HospitalInformationArticle` & `HospitalInformation` trong MySQL) và Backend Spring Boot 3.5 qua Device JWT Bearer Authentication.
