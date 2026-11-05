@@ -1,5 +1,11 @@
 # MediAssistRover — AI Voice + AI té ngã + Backend
 
+**Luồng đang tích hợp với robot:** dùng repo `C:\GitHub\BE_MAR` và BE đã
+deploy tại `https://mediassistrover.duckdns.org`. Xem phần **Chạy hội thoại
+trực tiếp với Pi** ở cuối trang. Chỉ chạy `run_web.ps1` và
+`run_robot_api.ps1` cho lượt thử voice; không khởi động thêm BE/MQTT từ
+thư mục `backend/` của repo AI vì có thể tranh phiên điều khiển robot.
+
 > Hệ thống hợp nhất tại `D:\AI_VOic22222`. Hướng dẫn chính: [UNIFIED_SYSTEM_GUIDE.md](docs/UNIFIED_SYSTEM_GUIDE.md).
 > Lưu trữ và báo staff: [VISION_STORAGE_AND_DELIVERY.md](docs/VISION_STORAGE_AND_DELIVERY.md).
 
@@ -201,3 +207,58 @@ py -3.11 -m src.main
 | `GREETING` | *"Xin chào", "Chào robot", "Hello"* | Phát lời chào thân thiện kèm giới thiệu trợ lý |
 | `FAREWELL` | *"Cảm ơn robot nhé", "Tạm biệt"* | Phát lời chúc sức khỏe |
 | `SELF_INTRO` | *"Bạn là ai?", "Bạn làm được những việc gì?"* | Giới thiệu chức năng robot trong bệnh viện |
+# Chạy hội thoại trực tiếp với Pi
+
+Workspace hiện tại: `C:\GitHub\AI_VOICE`. Repo Pi tương ứng nằm ở
+`C:\GitHub\RASPPI_MAR\PI_MAR`; BE ở `C:\GitHub\BE_MAR`.
+
+Từ PowerShell trong repo AI:
+
+```powershell
+Set-ExecutionPolicy -Scope Process Bypass
+.\run_web.ps1
+```
+
+Studio tại http://127.0.0.1:7860 dùng để thêm DOCX/PDF/MD/TXT và reindex.
+Trong một terminal khác, chạy `.\run_robot_api.ps1` để mở API HTTPS 7861
+cho Pi. Hai lệnh chỉ khởi động ứng dụng AI, không chạy thêm BE/MQTT/ROS.
+Nếu API cổng 7861 đã READY, launcher dùng lại dịch vụ đó, không mở bản thứ hai.
+
+API robot: `POST /api/robot/chat`, Bearer `AI_ROBOT_API_TOKEN`, body gồm
+`session_id`, `turn_id`, `text`, `language: "vi"` và tối đa 8 tin lịch sử.
+Có thể gửi `destinations` lấy từ BE của phiên map hiện tại (ID, mã/tên điểm,
+tên phòng nếu có). Nhận lệnh Việt, Anh hoặc câu trộn ngôn ngữ. Tên điểm khớp
+rõ được xử lý nhanh; câu chưa rõ được model đối chiếu với chính danh mục đó,
+không dùng bảng a/b/c hay mã phòng cố định để tạo lệnh. AI chỉ đề xuất một ID
+trong danh mục; Pi/BE xác minh lại map và đọc tên điểm trước khi xác nhận.
+API trả lời/ngữ cảnh/đề xuất điểm đến, không tự điều khiển robot. Token riêng,
+OpenAI key và TLS private key không được commit. CA công khai phải được Pi
+tin cậy; địa chỉ LAN trong chứng chỉ phải khớp `base_url` của Pi.
+
+`C:\GitHub\AI_VOICE\.env` giữ `OPENAI_API_KEY`, `AI_RESPONSE_MODEL`, `AI_INTENT_MODEL` và
+`AI_ROBOT_API_TOKEN` cho RAG/intent. STT/TTS hiện do BE EC2 gọi OpenAI với key
+trong `/etc/mediassistrover/backend.env` (`STT_ENABLED=true`,
+`TTS_ENABLED=true`); chúng chưa chuyển vào dịch vụ AI laptop. Pi chỉ giữ
+token riêng và CA trong `/home/ubuntu/mar-secrets/voice-ai.json`, không giữ
+OpenAI key. Mở phiên map trên HTML, chuẩn bị `WF_VOICE_ENDPOINT_V1`, rồi chạy
+navigation và chat trong hai terminal Pi. MOVE thành công mới chuyển sang
+step SPEAK báo đã tới nơi; voice không khởi tạo lại AMCL cho mỗi lượt.
+
+Index dùng `data/hospital_vector_store.json` với `EMBEDDING_PROVIDER=local`:
+vector băm từ khóa 384 chiều, không có OpenAI `vs_...` ID. Chất lượng tìm
+kiếm phụ thuộc tài liệu và từ khóa; đây chưa phải embedding ngữ nghĩa được
+huấn luyện. Cấu hình robot hiện dùng `AI_RESPONSE_MODEL=gpt-6-astra` cho RAG
+và `AI_INTENT_MODEL=gpt-6-luna` để hiểu lệnh chưa rõ, `AI_REASONING_EFFORT=low`.
+Câu khớp rõ tên endpoint không cần gọi LLM. Các model gọi OpenAI, vì vậy
+dịch vụ chạy ở laptop vẫn cần Internet. STT/TTS do BE xử lý; Pi chỉ thu/phát.
+
+Thử trên Pi bằng user ubuntu, không cần stack chuyển động:
+
+```sh
+cd /home/ubuntu/mediassist-mqtt-2026-10-08
+pi/.venv/bin/python tools/voice_audio.py chat --start-now --once
+```
+
+Nói sau bíp. Âm thanh thu trên Pi chỉ giữ trong RAM cho STT, không lưu WAV
+người dùng lâu dài. BE lưu hội thoại chữ; không gọi API lưu audio lên S3.
+RAG robot không tự thay câu trả lời lỗi model bằng một câu trả lời giả.

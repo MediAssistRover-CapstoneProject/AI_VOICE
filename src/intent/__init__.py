@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import re
+import unicodedata
 from dataclasses import dataclass
 from typing import Any
 
@@ -81,6 +82,17 @@ def _extract_room(text: str) -> str | None:
     return None
 
 
+def endpoint_destination(text: str) -> str | None:
+    """Only an explicit navigation phrase proposes a label; BE resolves its ID."""
+    plain=unicodedata.normalize('NFD',text.casefold().replace('đ','d'))
+    plain=''.join(c for c in plain if unicodedata.category(c)!='Mn')
+    plain=' '.join(plain.strip(' .!?').split())
+    match=re.fullmatch(r'(?:(?:hay|vui long|lam on|please|can you|could you) )?(?:(?:dan|dua|take|guide|bring|lead)(?: toi| minh| chung toi| me| us)? (?:den|toi|to)|(?:di|go|navigate|move) (?:den|toi|to)) (?:(?:diem|point|endpoint|vi tri|location) )?(.{1,160})',plain)
+    if not match:return None
+    label=re.sub(r' (?:nhe|voi|giup toi|please|thanks)$','',match.group(1)).strip()
+    return label or None
+
+
 class IntentClassifier:
     """Two-tier intent classifier: regex patterns + optional LLM fallback."""
 
@@ -102,6 +114,10 @@ class IntentClassifier:
             return IntentResult("UNKNOWN", 0.0, {}, text or "")
 
         cleaned = text.strip()
+
+        endpoint=endpoint_destination(cleaned)
+        if endpoint:
+            return IntentResult('ESCORT_REQUEST',.99,{'destination_endpoint':endpoint},cleaned)
 
         # Tier 1: Fast keyword matching
         for pattern, intent, base_conf in _PATTERNS:

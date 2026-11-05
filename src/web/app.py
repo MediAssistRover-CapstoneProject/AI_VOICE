@@ -261,11 +261,11 @@ def chat_query(query: str = Form(...)) -> dict[str, Any]:
             "P_TIEP_DON": "Quầy Tiếp đón",
         }
         display_name = room_names.get(room, room)
-        answer = f"Dạ, tôi sẽ dẫn bạn đến {display_name}. Vui lòng đi theo tôi với tốc độ an toàn ạ."
+        answer = f"Bạn đang yêu cầu dẫn đến {display_name}. Trang chat này chỉ xem trước ý định; chưa tạo yêu cầu hay job điều khiển robot."
         sources = [{"source": "Bản đồ số SLAM bệnh viện", "score": 1.0}]
         context_used = f"Dẫn đường tự hành tới điểm đích: {display_name}"
     elif intent.intent == "EMERGENCY_SOS":
-        answer = "Đã kích hoạt cảnh báo cấp cứu khẩn cấp! Đội ngũ y tế đang được điều phối đến ngay, xin giữ bình tĩnh ạ."
+        answer = "Bạn hãy gọi ngay nhân viên y tế gần nhất. Trang chat này chưa gửi cảnh báo cấp cứu tới hệ thống."
         sources = [{"source": "Hệ thống Cấp cứu SOS Khẩn cấp", "score": 1.0}]
         context_used = "Báo động khẩn cấp - Điều dưỡng trực tiếp nhận tức thời"
     elif intent.intent == "GREETING":

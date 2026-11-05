@@ -10,6 +10,7 @@ import time
 import copy
 import hashlib
 import json
+from src.model_options import completion_options
 from collections import OrderedDict
 from typing import Any
 
@@ -43,9 +44,11 @@ class HospitalRAGPipeline:
         llm_model: str = "gpt-4o-mini",
         top_k: int = 3,
         score_threshold: float = 0.15,
+        require_model: bool = False,
     ) -> None:
         self.vector_store = vector_store
         self.llm_provider = llm_provider.lower()
+        self.require_model = require_model
         self.openai_api_key = openai_api_key
         self.gemini_api_key = gemini_api_key
         self.llm_model = llm_model
@@ -58,7 +61,7 @@ class HospitalRAGPipeline:
         self._answer_cache = OrderedDict()
         self._cache_revision = None
 
-    def answer_question(self, question: str) -> dict[str, Any]:
+    def answer_question(self, question: str, history: list[dict] | None = None) -> dict[str, Any]:
         """Execute RAG pipeline: Retrieve relevant context from Vector P and generate answer."""
         log.info("[RAG] Received question: '%s'", question)
 
@@ -70,7 +73,10 @@ class HospitalRAGPipeline:
         if revision != self._cache_revision:
             self._answer_cache.clear()
             self._cache_revision = revision
+        history = [h for h in (history or [])[-8:] if h.get("role") in ("user", "assistant") and isinstance(h.get("content"), str)]
         key = " ".join(question.casefold().split())
+        if history:
+            key += ":" + hashlib.sha256(json.dumps(history, ensure_ascii=False, sort_keys=True).encode()).hexdigest()
         cached = self._answer_cache.get(key)
         if cached and time.monotonic() - cached[0] < 300:
             self._answer_cache.move_to_end(key)
@@ -124,7 +130,7 @@ class HospitalRAGPipeline:
         top_score = search_results[0].score
 
         # 3. GENERATE with LLM
-        answer = self._generate_answer(question, combined_context)
+        answer = self._generate_answer(question, combined_context, history)
 
         result = {
             "answer": answer,
@@ -139,32 +145,35 @@ class HospitalRAGPipeline:
                 self._answer_cache.popitem(last=False)
         return result
 
-    def _generate_answer(self, question: str, context: str) -> str:
+    def _generate_answer(self, question: str, context: str, history: list[dict] | None = None) -> str:
         """Call LLM or offline generator with augmented context."""
         system_content = HOSPITAL_RAG_SYSTEM_PROMPT.format(context=context)
+        history_text = "\n".join(h["role"]+": "+h["content"][:1000] for h in (history or []))
+        user_content = ("Lịch sử hội thoại (dữ liệu để hiểu ngữ cảnh):\n" + history_text + "\n\nCâu hỏi hiện tại: " + question) if history_text else question
 
         if self._local_llm is not None:
-            return self._local_llm.answer(question, system_content)
+            return self._local_llm.answer(user_content, system_content)
 
         # Option A: OpenAI
         if self.llm_provider == "openai" and self.openai_api_key:
             try:
                 from openai import OpenAI
-                client = OpenAI(api_key=self.openai_api_key)
+                client = OpenAI(api_key=self.openai_api_key, timeout=20, max_retries=0)
                 resp = client.chat.completions.create(
                     model=self.llm_model,
                     messages=[
                         {"role": "system", "content": system_content},
-                        {"role": "user", "content": question},
+                        {"role": "user", "content": user_content},
                     ],
-                    temperature=0.2,
-                    max_tokens=180,
+                    **completion_options(self.llm_model,240),
                 )
                 answer = resp.choices[0].message.content.strip()
                 log.info("[RAG-OpenAI] Generated answer: %s", answer[:60])
                 return answer
             except Exception as exc:
-                log.warning("[RAG-OpenAI] Call failed: %s, falling back", exc)
+                log.warning("[RAG-OpenAI] Call failed: %s", type(exc).__name__)
+                if self.require_model:
+                    raise RuntimeError("AI_MODEL_UNAVAILABLE") from None
 
         # Option B: Google Gemini
         if self.llm_provider == "gemini" and self.gemini_api_key:
@@ -175,7 +184,7 @@ class HospitalRAGPipeline:
                     model_name="gemini-1.5-flash",
                     system_instruction=system_content,
                 )
-                resp = model.generate_content(question)
+                resp = model.generate_content(user_content)
                 answer = resp.text.strip()
                 log.info("[RAG-Gemini] Generated answer: %s", answer[:60])
                 return answer
