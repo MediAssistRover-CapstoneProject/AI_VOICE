@@ -241,8 +241,17 @@ trong `/etc/mediassistrover/backend.env` (`STT_ENABLED=true`,
 `TTS_ENABLED=true`); chúng chưa chuyển vào dịch vụ AI laptop. Pi chỉ giữ
 token riêng và CA trong `/home/ubuntu/mar-secrets/voice-ai.json`, không giữ
 OpenAI key. Mở phiên map trên HTML, chuẩn bị `WF_VOICE_ENDPOINT_V1`, rồi chạy
-navigation và chat trong hai terminal Pi. MOVE thành công mới chuyển sang
-step SPEAK báo đã tới nơi; voice không khởi tạo lại AMCL cho mỗi lượt.
+navigation với `voice_chat.enabled=true`. Stack quản lý listener cùng phiên
+map. MOVE thành công mới chuyển sang step SPEAK báo đã tới nơi.
+
+Wake **“Chào cậu”** dùng [Zipformer tiếng Việt của sherpa-onnx](https://k2-fsa.github.io/sherpa/onnx/pretrained_models/offline-transducer/zipformer-transducer-models.html).
+Giải nén model `sherpa-onnx-zipformer-vi-30M-int8-2026-02-09` vào thư mục
+`%LOCALAPPDATA%\MediAssistRover\voice-ai\models`, cài dependency trong
+`requirements.txt`, rồi đặt `AI_WAKE_ENABLED=true` trong `.env`. Có thể đặt
+`AI_WAKE_ALIASES=Chào bạn` để nhận thêm câu này. Khởi động lại
+`run_robot_api.ps1`. Trên Pi, đặt `wake.mode=local_ai` và
+`wake.phrase="Chào cậu"` trong cấu hình riêng `voice-ai.json`. Kiểm tra
+`/health` có `wake.enabled=true` và `wake.configured=true`.
 
 Index dùng `data/hospital_vector_store.json` với `EMBEDDING_PROVIDER=local`:
 vector băm từ khóa 384 chiều, không có OpenAI `vs_...` ID. Chất lượng tìm

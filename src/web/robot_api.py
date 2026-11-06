@@ -1,4 +1,4 @@
-"""Authenticated text-only RAG API for the Pi. No MQTT, database or motion ownership."""
+"""Authenticated RAG and local wake recognition. No MQTT, DB or motion ownership."""
 from __future__ import annotations
 import hashlib
 import hmac
@@ -11,7 +11,7 @@ from collections import OrderedDict
 from typing import Literal
 from uuid import UUID
 from dotenv import load_dotenv
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import FastAPI, Header, HTTPException, Request
 from pydantic import BaseModel, Field
 
 ROOT=Path(__file__).resolve().parents[2]
@@ -28,6 +28,7 @@ intent_model=os.getenv('AI_INTENT_MODEL','gpt-6-luna')
 rag=HospitalRAGPipeline(store,llm_provider='openai',openai_api_key=os.getenv('OPENAI_API_KEY',''),llm_model=model,require_model=True)
 classifier=IntentClassifier(confidence_threshold=.6,use_llm_fallback=False)
 capacity=threading.BoundedSemaphore(1)
+wake_capacity=threading.BoundedSemaphore(1)
 cache=OrderedDict()
 index_revision=INDEX.stat().st_mtime_ns if INDEX.exists() else 0
 app=FastAPI(title='MAR Robot RAG',version='1.0',docs_url=None,redoc_url=None)
@@ -94,8 +95,37 @@ def authorize(value):
 
 @app.get('/health')
 def health():
+    from .wake import status as wake_status
     return dict(state='READY' if store.points and os.getenv('OPENAI_API_KEY') and os.getenv('AI_ROBOT_API_TOKEN') else 'NOT_CONFIGURED',
-        model=model,intent_model=intent_model,provider='openai',embedding=type(store.embeddings).__name__,vector_count=len(store.points))
+        model=model,intent_model=intent_model,provider='openai',embedding=type(store.embeddings).__name__,vector_count=len(store.points),wake=wake_status())
+
+
+@app.post('/api/robot/wake')
+async def wake(request: Request, authorization: str | None = Header(default=None)):
+    from starlette.concurrency import run_in_threadpool
+    from .wake import detect, MAX_PCM_BYTES
+
+    authorize(authorization)
+    media_type = request.headers.get('content-type', '').split(';', 1)[0].strip().lower()
+    if media_type != 'application/octet-stream' or request.headers.get('x-audio-format') != 'pcm_s16le_16000_mono':
+        raise HTTPException(415, 'WAKE_AUDIO_FORMAT_INVALID')
+    if not wake_capacity.acquire(blocking=False):
+        raise HTTPException(429, 'WAKE_BUSY')
+    raw = bytearray()
+    try:
+        async for block in request.stream():
+            if len(raw) + len(block) > MAX_PCM_BYTES:
+                raise HTTPException(413, 'WAKE_AUDIO_TOO_LARGE')
+            raw.extend(block)
+        try:
+            return await run_in_threadpool(detect, bytes(raw))
+        except ValueError as error:
+            raise HTTPException(422, str(error)) from None
+        except (RuntimeError, ImportError, OSError):
+            raise HTTPException(503, 'WAKE_ENGINE_UNAVAILABLE') from None
+    finally:
+        raw.clear()
+        wake_capacity.release()
 
 @app.post('/api/robot/chat')
 def chat(q:Question,authorization:str|None=Header(default=None)):
