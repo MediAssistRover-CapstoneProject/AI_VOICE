@@ -27,8 +27,13 @@ services:
         condition: service_healthy
       qdrant:
         condition: service_healthy
+      voice:
+        condition: service_healthy
     environment:
       DB_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-backend_robot_v1}
+      VOICE_SERVICE_ENABLED: "true"
+      VOICE_SERVICE_URL: http://voice:8000
+      VOICE_SERVICE_TOKEN: ${VOICE_SERVICE_TOKEN:?VOICE_SERVICE_TOKEN is required}
       DB_USERNAME: ${MYSQL_USER:-mediassist}
       DB_PASSWORD: ${MYSQL_PASSWORD:?MYSQL_PASSWORD is required}
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
@@ -96,6 +101,27 @@ services:
       - knowledge-files:/app/data/knowledge
     ports:
       - "${BACKEND_BIND_ADDRESS:-127.0.0.1}:${BACKEND_PORT:-8080}:8080"
+
+  voice:
+    build:
+      context: ..
+      dockerfile: backend/Dockerfile.voice
+    restart: unless-stopped
+    environment:
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      AI_RESPONSE_MODEL: ${AI_RESPONSE_MODEL:-gpt-4o-mini}
+      VOICE_SERVICE_TOKEN: ${VOICE_SERVICE_TOKEN:?VOICE_SERVICE_TOKEN is required}
+      PYTHONIOENCODING: utf-8
+    volumes:
+      - ../data:/app/data
+    expose:
+      - "8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 5s
+      timeout: 4s
+      retries: 20
+      start_period: 15s
 
   reverse-proxy:
     image: nginx:1.27-alpine

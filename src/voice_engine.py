@@ -23,6 +23,7 @@ from src.query import HospitalQueryHandler
 from src.rag import HospitalRAGPipeline, HospitalVectorStore, create_embeddings
 from src.stt import STTBase, create_stt
 from src.tts import SpeechClient
+from src.rag.faq_store import FAQStore
 
 log = logging.getLogger("mar_voice")
 
@@ -101,6 +102,7 @@ class VoiceEngine:
             openai_api_key=openai_api_key,
             gemini_api_key=self._config.get("rag", {}).get("gemini_api_key", ""),
             llm_model=intent_cfg.get("llm_model", "gpt-4o-mini"),
+            faq_store=FAQStore(Path(__file__).resolve().parent.parent/'data/faqs.json'),
         )
 
         # TTS client

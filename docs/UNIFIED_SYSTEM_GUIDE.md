@@ -1,5 +1,7 @@
 # MediAssist: AI Voice, AI té ngã và Backend trong một dự án
 
+> Cập nhật 07/11/2026: tài liệu này mô tả launcher Voice/Vision laptop. Cách chạy BE + Voice/FAQ mặc định hiện tại ở [RUN_ALL.md](../backend/RUN_ALL.md); phần Pi ở [RASPBERRY_PI_VOICE_SETUP.md](RASPBERRY_PI_VOICE_SETUP.md). Launcher Studio 7860 không phải API native 7861 và không bắt buộc cho Compose headless mới.
+
 ## Phân chia thư mục
 
 - `src/`: AI Voice hiện có, giữ các entrypoint `src.main`, `src.web.app`, RAG,

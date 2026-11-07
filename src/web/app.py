@@ -20,6 +20,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, Response
+from fastapi.staticfiles import StaticFiles
 
 ROOT = Path(__file__).resolve().parent.parent.parent
 load_dotenv(ROOT / ".env", override=False)
@@ -35,6 +36,9 @@ from src.rag import (
     create_embeddings,
 )
 from src.tts import SpeechClient
+from src.rag.faq_store import FAQStore, FAQDataError, faq_allowed
+from src.web.faq_api import create_faq_router
+from src.platform.faq_launcher import runtime_info
 from src.utils.logger import setup_logger
 
 log = setup_logger("mar_web_app")
@@ -42,6 +46,8 @@ log = setup_logger("mar_web_app")
 DOCS_DIR = ROOT / "data" / "documents"
 DOCS_DIR.mkdir(parents=True, exist_ok=True)
 VECTOR_DB_FILE = ROOT / "data" / "hospital_vector_store.json"
+faq_store = FAQStore(ROOT / 'data' / 'faqs.json')
+STATIC_DIR = Path(__file__).resolve().parent / 'static'
 
 # Initialize FastAPI
 app = FastAPI(
@@ -57,6 +63,18 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.include_router(create_faq_router(faq_store))
+app.mount('/assets', StaticFiles(directory=STATIC_DIR, check_dir=False), name='assets')
+
+
+@app.get('/faq', response_class=HTMLResponse)
+def faq_page():
+    return (STATIC_DIR/'faq.html').read_text(encoding='utf-8')
+
+
+@app.get('/api/runtime')
+def studio_runtime():
+    return runtime_info(ROOT)
 
 # Global State
 embeddings = create_embeddings(
@@ -70,12 +88,14 @@ rag_pipeline = HospitalRAGPipeline(
     llm_provider="openai" if os.getenv("OPENAI_API_KEY") else "offline",
     openai_api_key=os.getenv("OPENAI_API_KEY", ""),
     llm_model="gpt-4o-mini",
+    faq_store=faq_store,
 )
 intent_classifier = IntentClassifier(
     confidence_threshold=0.6,
     use_llm_fallback=bool(os.getenv("OPENAI_API_KEY")),
     openai_api_key=os.getenv("OPENAI_API_KEY", ""),
 )
+fast_intent_classifier = IntentClassifier(use_llm_fallback=False)
 
 
 class DummyBackend:
@@ -117,9 +137,13 @@ def _rebuild_index_internal() -> int:
 @app.get("/api/stats")
 def get_stats() -> dict[str, Any]:
     doc_files = list(DOCS_DIR.glob("*.*"))
+    try:faq_stats=faq_store.snapshot()
+    except FAQDataError:faq_stats=dict(total=0,active=0)
     return {
         "vector_points_count": len(vector_store.points),
         "documents_count": len(doc_files),
+        "faq_count": faq_stats['total'],
+        "faq_active_count": faq_stats['active'],
         "embedding_provider": os.getenv("EMBEDDING_PROVIDER", "local"),
         "has_openai_key": bool(os.getenv("OPENAI_API_KEY")),
         "vector_db_file": str(VECTOR_DB_FILE.name),
@@ -247,10 +271,18 @@ def chat_query(query: str = Form(...)) -> dict[str, Any]:
         raise HTTPException(status_code=400, detail="Câu hỏi không được rỗng")
 
     # Intent Classification
-    intent = intent_classifier.classify(user_text)
+    fast_intent = fast_intent_classifier.classify(user_text)
+    try:faq = rag_pipeline.lookup_faq(user_text) if faq_allowed(user_text, fast_intent.intent) else None
+    except FAQDataError:raise HTTPException(503, 'Kho FAQ chưa đọc được. Kiểm tra file FAQ trước khi dùng.') from None
+    intent = fast_intent if faq else intent_classifier.classify(user_text)
+    answer_mode = 'scripted'
+    timings_ms = {}
 
     # Dispatch via RAG or Intent Handlers
-    if intent.intent == "ESCORT_REQUEST":
+    if faq:
+        intent.intent='QUERY_HOSPITAL_INFO';intent.confidence=1.
+        answer=faq['answer'];sources=faq['sources'];context_used=faq['context_used'];answer_mode='approved_faq'
+    elif intent.intent == "ESCORT_REQUEST":
         room = intent.entities.get("destination_room", "phòng chỉ định")
         room_names = {
             "P_CAP_CUU": "Phòng Cấp cứu",
@@ -282,11 +314,15 @@ def chat_query(query: str = Form(...)) -> dict[str, Any]:
         answer = rag_res["answer"]
         sources = rag_res["sources"]
         context_used = rag_res["context_used"]
+        answer_mode=rag_res.get('answer_mode','generated')
+        timings_ms=rag_res.get('timings_ms',{})
 
     duration_ms = round((time.monotonic() - t0) * 1000, 1)
 
     return {
         "query": user_text,
+        "answer_mode": answer_mode,
+        "timings_ms": timings_ms,
         "answer": answer,
         "intent": intent.intent,
         "confidence": intent.confidence,
@@ -397,6 +433,7 @@ HTML_DASHBOARD = """<!DOCTYPE html>
             Kho Dữ liệu Tài liệu & Vector P
           </h2>
           <p class="text-xs text-slate-500 mt-0.5">Tải lên file Word, PDF hoặc viết thêm bài viết mới</p>
+          <a href="/faq" class="inline-flex mt-2 text-sm font-semibold text-teal-700 underline">Quản lý FAQ trả lời nhanh</a>
         </div>
         <button onclick="reindexVectorStore()" id="btn-reindex" class="text-xs font-semibold bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 px-3 py-1.5 rounded-lg flex items-center space-x-1.5 transition">
           <i class="fa-solid fa-bolt"></i>

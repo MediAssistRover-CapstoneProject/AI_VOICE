@@ -70,6 +70,12 @@ class SystemLauncherTests(unittest.TestCase):
         self.assertEqual([p.name for p in self.plans()], ["voice", "vision"])
         self.assertEqual(self.plans(backend_compose=True)[0].name, "backend")
 
+    def test_voice_includes_faq_with_same_folder_guard(self):
+        voice = self.plans(no_vision=True)[0]
+        self.assertIn('src.platform.faq_launcher',voice.command)
+        self.assertIn('--supervised',voice.command)
+        self.assertNotIn('0.0.0.0',voice.command)
+
     def test_can_disable_voice_without_importing_it(self):
         previously_loaded = sys.modules.get("src.web.app")
         self.assertEqual([p.name for p in self.plans(no_voice=True)], ["vision"])

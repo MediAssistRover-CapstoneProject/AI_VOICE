@@ -40,6 +40,7 @@ class AssistantServiceTest {
     @Mock KnowledgeChunkRepository knowledgeChunks;
     @Mock HospitalInformationArticleRepository hospitalArticles;
     @Mock KnowledgeRetrievalService retrieval;
+    @Mock VoiceServiceGateway pythonVoice;
     @Mock OpenAiGateway openAi;
     @Mock ServiceRequestService requestService;
     @Mock EmergencyService emergencyService;
@@ -106,6 +107,22 @@ class AssistantServiceTest {
         when(turns.saveAndFlush(any())).thenAnswer(call->{VoiceAssistantTurn t=call.getArgument(0);t.setTurnId(UUID.randomUUID());return t;});
         when(properties.sessionTtl()).thenReturn(java.time.Duration.ofMinutes(30));
         return id;
+    }
+
+    @Test
+    void reviewedPythonFaqSkipsJavaRetrievalAndModel() {
+        UUID id=setupTurn();
+        var source=new KnowledgeRetrievalService.Source("VOICE1","DOCUMENT",null,null,null,"FAQ test","local:fixture","Test answer","hash",1,null);
+        var result=json.createObjectNode().put("intent","INFORMATION").put("answer","Test answer")
+            .put("speech_text","Test answer").put("grounding_mode","HOSPITAL");
+        result.putArray("used_source_ids").add("VOICE1");result.putArray("warnings");
+        when(pythonVoice.answer(eq("Test FAQ?"),anyList(),eq(true),eq(false)))
+            .thenReturn(Optional.of(new VoiceServiceGateway.Answer(result,List.of(source),null)));
+        var response=service.textTurn(id,"Test FAQ?","python-faq","KIOSK",null);
+        assertThat(response.answer()).isEqualTo("Test answer");
+        assertThat(response.model()).isNull();
+        assertThat(response.status()).isEqualTo("READY");
+        verifyNoInteractions(retrieval,openAi,requestService,emergencyService);
     }
 
     private KnowledgeRetrievalService.Source hospitalSource() {

@@ -12,8 +12,7 @@ load_dotenv(ROOT / ".env", override=False)
 
 from src.audio import MicrophoneCapture
 from src.audio.player import play_wav
-from src.intent import IntentClassifier
-from src.rag import HospitalRAGPipeline, HospitalVectorStore, create_embeddings
+from src.web.app import chat_query, get_stats
 from src.stt import create_stt
 from src.tts import SpeechClient
 from src.utils.logger import setup_logger
@@ -51,20 +50,8 @@ def main():
 
     # 3. Initialize RAG & Vector P
     print("[3/5] Nạp cơ sở dữ liệu Vector ('Vector P')...")
-    db_path = ROOT / "data" / "hospital_vector_store.json"
-    emb = create_embeddings("local")
-    store = HospitalVectorStore(embeddings=emb, persist_path=db_path)
-    rag = HospitalRAGPipeline(
-        vector_store=store,
-        llm_provider="openai" if openai_key else "offline",
-        openai_api_key=openai_key,
-        llm_model="gpt-4o-mini",
-    )
-    classifier = IntentClassifier(
-        confidence_threshold=0.6,
-        use_llm_fallback=bool(openai_key),
-        openai_api_key=openai_key,
-    )
+    stats = get_stats()
+    print(f"  ↳ {stats['vector_points_count']} đoạn tài liệu; {stats['faq_active_count']} FAQ đang bật.")
 
     # 4. Speak Greeting
     greeting_text = "Xin chào bạn! Tôi là robot hỗ trợ bệnh viện MediAssist. Hệ thống mic và loa đã sẵn sàng. Mời bạn đặt câu hỏi ạ."
@@ -97,31 +84,21 @@ def main():
 
     print(f"\n🗣️ BẠN ĐÃ NÓI: \"{user_text}\"")
 
-    # Intent Classification
-    intent = classifier.classify(user_text)
-    print(f"🎯 Ý định nhận diện: {intent.intent} (Độ tin cậy: {intent.confidence:.2f})")
-
-    # Handle Intent via RAG Vector P
+    # Use exactly the same FAQ/intent/RAG path as Studio. This test never
+    # creates motion jobs or SOS incidents and must not claim that it does.
     print("🔍 Đang tra cứu cơ sở dữ liệu Vector ('Vector P')...")
-    if intent.intent == "ESCORT_REQUEST":
-        room = intent.entities.get("destination_room", "phòng chỉ định")
-        answer_text = f"Dạ, tôi sẽ dẫn bạn đến {room}. Vui lòng đi theo tôi với tốc độ an toàn ạ."
-    elif intent.intent == "EMERGENCY_SOS":
-        answer_text = "Đã kích hoạt cấp cứu khẩn cấp! Đội ngũ y tế đang đến ngay, xin giữ bình tĩnh ạ."
-    elif intent.intent == "GREETING":
-        answer_text = "Xin chào bạn! Tôi là trợ lý robot bệnh viện. Bạn cần tôi giúp gì hôm nay ạ?"
-    elif intent.intent == "FAREWELL":
-        answer_text = "Chúc bạn nhiều sức khỏe và khám bệnh thuận lợi! Tạm biệt bạn."
-    else:
-        rag_res = rag.answer_question(user_text)
-        answer_text = rag_res["answer"]
-        if rag_res["sources"]:
-            print(f"  ↳ Trích xuất từ nguồn: {rag_res['sources'][0]['source']} (Điểm: {rag_res['sources'][0]['score']})")
+    result = chat_query(user_text)
+    answer_text = result['answer']
+    print(f"🎯 Ý định: {result['intent']}; cách trả lời: {result['answer_mode']}")
+    if result['sources']:
+        print(f"  ↳ Nguồn: {result['sources'][0]['source']}")
 
     print(f"\n🤖 ROBOT TRẢ LỜI: \"{answer_text}\"")
     print("🔊 Đang phát giọng nói qua LOA LAPTOP...")
-    tts.speak(answer_text)
-    print("\n✅ Hoàn tất giao tiếp thử nghiệm thành công!\n")
+    if tts.speak(answer_text):
+        print("\n✅ Đã hoàn tất lượt phát âm thanh; kiểm tra bằng cách nghe loa laptop.\n")
+    else:
+        print("\nKhông phát được giọng đọc. Hãy kiểm tra thiết bị âm thanh và dịch vụ TTS.\n")
 
 
 if __name__ == "__main__":

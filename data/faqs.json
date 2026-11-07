@@ -1,0 +1,78 @@
+{
+  "version": 1,
+  "faqs": [
+    {
+      "questions": [
+        "Bệnh viện có wifi miễn phí không?",
+        "Wifi bệnh viện tên gì?",
+        "Mật khẩu wifi bệnh viện là gì?",
+        "Mật khẩu wifi là gì?",
+        "Wifi có mật khẩu không?",
+        "bệnh viện có wi-fi miễn phí không"
+      ],
+      "answer": "Bệnh viện có wifi miễn phí tên MediAssist_Free_Wifi, không yêu cầu mật khẩu.",
+      "source": "so_tay_tra_cuu_benh_vien_mediassist.docx — Mục 6",
+      "source_excerpt": "Kết nối Wifi miễn phí: Mạng Wifi MediAssist_Free_Wifi phủ sóng toàn bộ bệnh viện, không yêu cầu mật khẩu.",
+      "approved": true,
+      "visibility": "PUBLIC",
+      "id": "e416b00f-290b-5285-b824-9ad5c42cc05a",
+      "updated_at": "2026-11-07T08:04:59.250398Z"
+    },
+    {
+      "questions": [
+        "Nhà thuốc bệnh viện ở đâu?",
+        "Nhà thuốc nằm ở tầng mấy?",
+        "Nhà thuốc ở đâu?"
+      ],
+      "answer": "Nhà thuốc bệnh viện ở Tầng 1, khu sảnh chính và tiếp đón.",
+      "source": "so_tay_tra_cuu_benh_vien_mediassist.docx — Mục 2",
+      "source_excerpt": "Tầng 1 (Sảnh chính & Tiếp đón): Quầy Tiếp đón và bốc số tự động (P_TIEP_DON), Khoa Cấp cứu & Hồi sức (P_CAP_CUU), Nhà thuốc bệnh viện (P_NHA_THUOC), Quầy thu viện phí & Bảo hiểm y tế.",
+      "approved": true,
+      "visibility": "PUBLIC",
+      "id": "9a39858a-372d-5fca-96de-eda8bc56a035",
+      "updated_at": "2026-11-07T07:07:21.795256Z"
+    },
+    {
+      "questions": [
+        "Quầy tiếp đón ở tầng mấy?",
+        "Tôi lấy số khám ở đâu?",
+        "Quầy tiếp đón ở đâu?"
+      ],
+      "answer": "Quầy Tiếp đón và bốc số tự động nằm tại Tầng 1, khu sảnh chính.",
+      "source": "so_tay_tra_cuu_benh_vien_mediassist.docx — Mục 2",
+      "source_excerpt": "Tầng 1 (Sảnh chính & Tiếp đón): Quầy Tiếp đón và bốc số tự động (P_TIEP_DON), Khoa Cấp cứu & Hồi sức (P_CAP_CUU), Nhà thuốc bệnh viện (P_NHA_THUOC), Quầy thu viện phí & Bảo hiểm y tế.",
+      "approved": true,
+      "visibility": "PUBLIC",
+      "id": "96bfe1ce-f0b7-59ed-8e77-585ad78e1475",
+      "updated_at": "2026-11-07T07:07:34.934197Z"
+    },
+    {
+      "questions": [
+        "Phòng xét nghiệm ở tầng mấy?",
+        "Phòng xét nghiệm máu và nước tiểu ở đâu?",
+        "Xét nghiệm ở đâu?"
+      ],
+      "answer": "Phòng Xét nghiệm máu và Nước tiểu nằm tại Tầng 2, khu khám bệnh chuyên khoa.",
+      "source": "so_tay_tra_cuu_benh_vien_mediassist.docx — Mục 2",
+      "source_excerpt": "Tầng 2 (Khu Khám bệnh Chuyên khoa): Phòng khám Nội 01 (P_KHAM_NOI_01), Phòng khám Ngoại 02 (P_KHAM_NGOAI_02), Phòng khám Nhi 03 (P_KHAM_NHI_03), Phòng Xét nghiệm máu & Nước tiểu (P_XET_NGHIEM).",
+      "approved": true,
+      "visibility": "PUBLIC",
+      "id": "c7035675-410b-53ab-af58-b3a70ab7db43",
+      "updated_at": "2026-11-07T07:07:42.366112Z"
+    },
+    {
+      "questions": [
+        "Bệnh viện có cho mượn xe lăn không?",
+        "Xe lăn miễn phí lấy ở đâu?",
+        "bệnh viện có xe lăn không"
+      ],
+      "answer": "Bệnh viện có xe lăn miễn phí tại cửa vào sảnh chính.",
+      "source": "so_tay_tra_cuu_benh_vien_mediassist.docx — Mục 6",
+      "source_excerpt": "Hỗ trợ người cao tuổi & người khuyết tật: Bệnh viện trang bị xe lăn miễn phí tại cửa vào sảnh chính.",
+      "approved": true,
+      "visibility": "PUBLIC",
+      "id": "ecc03c71-ba8c-5b21-bfbb-63f1391126de",
+      "updated_at": "2026-11-07T08:04:59.345435Z"
+    }
+  ]
+}

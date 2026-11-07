@@ -117,7 +117,13 @@ class IntentClassifier:
 
         endpoint=endpoint_destination(cleaned)
         if endpoint:
-            return IntentResult('ESCORT_REQUEST',.99,{'destination_endpoint':endpoint},cleaned)
+            entities = {'destination_endpoint': endpoint}
+            # Keep the legacy VoiceEngine contract for known rooms. New/custom
+            # map labels still require resolution against the live BE catalog.
+            room = _extract_room(cleaned)
+            if room:
+                entities['destination_room'] = room
+            return IntentResult('ESCORT_REQUEST',.99,entities,cleaned)
 
         # Tier 1: Fast keyword matching
         for pattern, intent, base_conf in _PATTERNS:

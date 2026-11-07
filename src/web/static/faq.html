@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>FAQ bệnh viện · MAR Studio</title>
+  <link rel="stylesheet" href="/assets/faq.css">
+  <script src="/assets/faq.js" defer></script>
+</head>
+<body>
+  <header class="topbar"><a href="/" class="brand">MAR Studio</a><a href="/">Tài liệu Word & thử hội thoại</a></header>
+  <main>
+    <div class="intro"><div><p class="eyebrow">Kho câu trả lời đã kiểm tra</p><h1>FAQ bệnh viện</h1>
+      <p>Thêm các cách hỏi tương đương và một câu trả lời ngắn. FAQ đã bật được trả lời trực tiếp, không cần chờ AI soạn lại.</p></div>
+      <div class="counts" aria-live="polite"><strong id="active-count">—</strong><span>FAQ đang dùng</span><small id="total-count">Đang tải danh sách</small></div>
+    </div>
+    <p id="notice" class="notice" role="status" hidden></p>
+    <div class="workspace">
+      <aside class="library"><div class="section-title"><h2>Danh sách FAQ</h2><button id="new-faq" type="button" class="primary">Thêm FAQ</button></div>
+        <label class="filter-label" for="filter">Tìm câu hỏi hoặc câu trả lời</label><input id="filter" type="search" placeholder="Ví dụ: wifi, nhà thuốc…">
+        <div id="faq-list" class="faq-list" aria-label="Danh sách FAQ"></div>
+      </aside>
+      <section class="editor" aria-labelledby="editor-title">
+        <div class="section-title"><h2 id="editor-title">Thêm FAQ</h2><span id="entry-status" class="badge">Bản nháp</span></div>
+        <form id="faq-form">
+          <label for="question">Câu hỏi chính</label><input id="question" required maxlength="200" placeholder="Ví dụ: Bệnh viện có wifi miễn phí không?">
+          <label for="aliases">Các cách hỏi khác <span class="optional">mỗi dòng một câu</span></label>
+          <textarea id="aliases" rows="3" placeholder="Wifi bệnh viện tên gì?&#10;Mật khẩu wifi là gì?"></textarea>
+          <label for="answer">Câu robot sẽ đọc</label><textarea id="answer" rows="3" required maxlength="500" placeholder="Nhập câu trả lời đã được kiểm tra theo nguồn bệnh viện."></textarea>
+          <p class="hint"><span id="answer-length">0</span>/500 ký tự. Nên viết 1–3 câu ngắn, dễ nghe.</p>
+          <label for="source">Nguồn xác nhận</label><input id="source" required maxlength="500" placeholder="Tên tài liệu, mục và phiên bản áp dụng">
+          <label for="source-excerpt">Trích đoạn nguồn để đối chiếu <span class="optional">không bắt buộc</span></label>
+          <textarea id="source-excerpt" rows="3" maxlength="2000" placeholder="Dán nguyên đoạn làm căn cứ cho câu trả lời."></textarea>
+          <label for="visibility">Phạm vi sử dụng</label><select id="visibility"><option value="PUBLIC">Công khai cho bệnh nhân</option><option value="INTERNAL">Nội bộ · không dùng để trả lời bệnh nhân</option></select>
+          <label class="approval"><input id="approved" type="checkbox"><span>Tôi đã kiểm tra nội dung và nguồn, cho phép dùng câu trả lời này.</span></label>
+          <p class="hint" id="approval-hint">Bản nháp không được dùng để trả lời robot. FAQ cần được duyệt và đặt công khai để bật.</p>
+          <div class="actions"><button id="save-faq" type="submit" class="primary">Lưu bản nháp</button><button id="delete-faq" type="button" class="danger" hidden>Xóa FAQ này</button></div>
+        </form>
+      </section>
+    </div>
+    <section class="tester" aria-labelledby="tester-title"><div><p class="eyebrow">Kiểm tra trước khi dùng</p><h2 id="tester-title">Thử câu hỏi với FAQ đang bật</h2><p>Chỉ kiểm tra kho FAQ; không gọi AI hoặc điều khiển robot.</p></div>
+      <form id="test-form"><label class="sr-only" for="test-question">Câu hỏi thử FAQ</label><input id="test-question" required maxlength="2000" placeholder="Nhập một cách hỏi bạn đã lưu…"><button class="primary" type="submit">Thử FAQ</button></form>
+      <div id="test-result" class="test-result" role="status" hidden></div>
+    </section>
+    <footer><p id="data-location">Đang xác định nơi lưu FAQ…</p><p>FAQ được lưu riêng với tài liệu Word. Nạp lại tài liệu hoặc Re-index vẫn giữ nguyên FAQ đã lưu.</p></footer>
+  </main>
+</body>
+</html>

@@ -1,12 +1,11 @@
 @echo off
-REM Khoi chay Giao dien Web MediAssistRover AI Voice & RAG Studio
-
-echo ==========================================================
-echo  Khoi chay MediAssistRover AI Voice ^& RAG Web Studio
-echo  Dia chi: http://localhost:7860
-echo ==========================================================
-
-start "" "http://localhost:7860"
-py -3.11 -m uvicorn src.web.app:app --host 0.0.0.0 --port 7860 --reload
-
-pause
+setlocal
+cd /d "%~dp0"
+set "MAR_VOICE_PY=%~dp0.venv-voice\Scripts\python.exe"
+if not exist "%MAR_VOICE_PY%" set "MAR_VOICE_PY=%~dp0.venv\Scripts\python.exe"
+if exist "%MAR_VOICE_PY%" (
+  "%MAR_VOICE_PY%" -m src.platform.faq_launcher --open-browser %*
+) else (
+  py -3.11 -m src.platform.faq_launcher --open-browser %*
+)
+if errorlevel 1 pause

@@ -1,0 +1,3 @@
+# Keep the exported Pi patch byte-stable so manifest SHA-256 survives Windows checkout.
+# Unified-diff context for empty lines contains a required trailing space.
+deploy/pi/*.patch text eol=lf whitespace=-blank-at-eol

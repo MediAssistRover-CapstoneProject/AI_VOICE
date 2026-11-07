@@ -1,0 +1,1061 @@
+diff --git a/PI_MAR/pi/mediassist/cloud_speech.py b/PI_MAR/pi/mediassist/cloud_speech.py
+index 97fbfa7..352fd02 100644
+--- a/PI_MAR/pi/mediassist/cloud_speech.py
++++ b/PI_MAR/pi/mediassist/cloud_speech.py
+@@ -1,12 +1,15 @@
+ """Fetch BE-generated WAV over verified HTTPS; never sends a provider key to the robot."""
+ import asyncio
++import array
+ import hashlib
+ import io
+ import json
+ from pathlib import Path
+ import ssl
+ import struct
++import sys
+ import time
++from dataclasses import dataclass
+ import urllib.error
+ import urllib.request
+ import wave
+@@ -16,6 +19,11 @@ from .contracts import StepError
+ MAX_AUDIO_BYTES = 4 * 1024 * 1024
+ 
+ 
++@dataclass(frozen=True)
++class PendingAudio:
++    retry_after: float | None = None
++
++
+ class NoRedirect(urllib.request.HTTPRedirectHandler):
+     def redirect_request(self, *args, **kwargs):
+         return None
+@@ -34,6 +42,9 @@ def validate_cloud_config(cfg):
+     wait = cfg.get('wait_timeout_sec', 45)
+     if type(wait) not in (int, float) or not 5 <= wait <= 180:
+         raise StepError('INVALID_TTS_WAIT_TIMEOUT')
++    interval = cfg.get('poll_interval_sec', .5)
++    if type(interval) not in (int, float) or not .25 <= interval <= 2:
++        raise StepError('INVALID_TTS_POLL_INTERVAL')
+ 
+ 
+ def fetch_once(cfg, data):
+@@ -56,7 +67,10 @@ def fetch_once(cfg, data):
+     try:
+         with opener.open(request, timeout=8) as response:
+             if response.status == 202:
+-                return None
++                # Honor the server's backoff; use a shorter configured fallback
++                # only when it does not provide a valid Retry-After in seconds.
++                wait = response.headers.get('Retry-After', '')
++                return PendingAudio(float(wait) if str(wait).isdigit() else None)
+             raw = response.read(MAX_AUDIO_BYTES + 1)
+             if (response.status != 200 or len(raw) <= 44 or len(raw) > MAX_AUDIO_BYTES
+                     or raw[:4] != b'RIFF' or raw[8:12] != b'WAVE'):
+@@ -83,6 +97,8 @@ def fetch_once(cfg, data):
+ def volume_wav(raw, volume):
+     """Scale PCM and rebuild lengths, including provider WAVs with streaming headers."""
+     try:
++        if type(volume) is not int or not 0 <= volume <= 100:
++            raise StepError('TTS_VOLUME_INVALID')
+         with wave.open(io.BytesIO(raw), 'rb') as source:
+             params = source.getparams()
+             if source.getcomptype() != 'NONE' or source.getsampwidth() not in (1, 2, 3, 4):
+@@ -93,7 +109,18 @@ def volume_wav(raw, volume):
+         if not frames or len(frames) > MAX_AUDIO_BYTES or len(frames) % frame_size:
+             raise StepError('TTS_WAV_FORMAT_UNSUPPORTED')
+         output = frames
+-        if volume != 100:
++        if volume == 0:
++            output = (b'\x80' if width == 1 else b'\0') * len(frames)
++        elif volume != 100 and width in (2, 4) and array.array('h' if width == 2 else 'i').itemsize == width:
++            # Avoid two int/bytes conversions for every PCM sample. Preserve
++            # the original rounding and handle WAV little-endian explicitly.
++            kind = 'h' if width == 2 else 'i'
++            samples = array.array(kind, frames)
++            if sys.byteorder != 'little':samples.byteswap()
++            scaled = array.array(kind, (round(value * volume / 100) for value in samples))
++            if sys.byteorder != 'little':scaled.byteswap()
++            output = scaled.tobytes()
++        elif volume != 100:
+             output = bytearray(len(frames))
+             for start in range(0, len(frames), width):
+                 value = int.from_bytes(frames[start:start+width], 'little', signed=width != 1)
+@@ -114,16 +141,25 @@ def volume_wav(raw, volume):
+         raise StepError('TTS_WAV_FORMAT_UNSUPPORTED') from None
+ 
+ 
+-async def download(cfg, data):
++async def download(cfg, data, timings=None):
+     deadline = time.monotonic() + cfg.get('wait_timeout_sec', 45)
++    fetch_ms = poll_ms = 0.
+     while True:
+         remaining = deadline - time.monotonic()
+         if remaining <= 0:
+             raise StepError('TTS_NOT_READY', 'Prepare this text on BE first, then create a new speech Job')
+         try:
++            started = time.monotonic()
+             raw = await asyncio.wait_for(asyncio.to_thread(fetch_once, cfg, data), timeout=remaining)
++            fetch_ms += (time.monotonic()-started)*1000
+         except asyncio.TimeoutError:
+             raise StepError('TTS_NOT_READY') from None
+-        if raw is not None:
++        if raw is not None and not isinstance(raw, PendingAudio):
++            if timings is not None:
++                timings.update(tts_http_total_ms=round(fetch_ms,3),tts_poll_wait_ms=round(poll_ms,3))
+             return raw
+-        await asyncio.sleep(min(2, max(0, deadline - time.monotonic())))
++        interval = raw.retry_after if isinstance(raw, PendingAudio) and raw.retry_after is not None else cfg.get('poll_interval_sec', .5)
++        # Still bound a malformed zero Retry-After to prevent a hot poll loop.
++        started = time.monotonic()
++        await asyncio.sleep(min(max(.25,interval), max(0, deadline - time.monotonic())))
++        poll_ms += (time.monotonic()-started)*1000
+diff --git a/PI_MAR/pi/mediassist/speech.py b/PI_MAR/pi/mediassist/speech.py
+index d20c0ff..77e94af 100644
+--- a/PI_MAR/pi/mediassist/speech.py
++++ b/PI_MAR/pi/mediassist/speech.py
+@@ -4,6 +4,7 @@ import logging
+ import re
+ import shutil
+ import tempfile
++import time
+ from pathlib import Path
+ from .contracts import StepError
+ from .store import utcnow
+@@ -64,7 +65,9 @@ class SpeechPlayer:
+                             pass
+                         await process.wait()
+ 
+-    async def speak(self, params, playback_guard=None):
++    async def speak(self, params, playback_guard=None, on_playback_start=None):
++        started = time.monotonic()
++        timings = {}
+         if not self.cfg.get('enabled'):
+             raise StepError('SPEECH_NOT_ENABLED')
+         engine = self.cfg.get('engine', 'espeak-ng')
+@@ -73,16 +76,21 @@ class SpeechPlayer:
+             raise StepError('SPEECH_DEPENDENCY_MISSING', 'Install espeak-ng and alsa-utils inside MentorPi')
+         device = audio_device(self.cfg)
+         data = params['data']
++        lock_started = time.monotonic()
+         async with self.lock:
++            timings['audio_lock_wait_ms'] = round((time.monotonic()-lock_started)*1000, 3)
+             if playback_guard is not None and not playback_guard():
+                 raise StepError('NAVIGATION_GUIDANCE_EXPIRED')
+             with tempfile.TemporaryDirectory(prefix='mar-speech-') as folder:
++                synthesis_started = time.monotonic()
+                 wav = str(Path(folder) / 'speech.wav')
+                 if engine == 'be-tts':
+                     from .cloud_speech import download, volume_wav
+-                    raw = await download(self.cfg, data)
++                    raw = await download(self.cfg, data, timings=timings)
++                    volume_started = time.monotonic()
+                     raw = await asyncio.to_thread(volume_wav, raw, data.get('volume', 70))
+                     Path(wav).write_bytes(raw)
++                    timings['tts_volume_and_file_ms'] = round((time.monotonic()-volume_started)*1000, 3)
+                 elif engine == 'espeak-ng':
+                     await self.process([synth, '-v', data.get('language_code', 'vi'),
+                         '-s', str(data.get('speed_wpm', 150)), '-a', str(data.get('volume', 70)),
+@@ -93,10 +101,16 @@ class SpeechPlayer:
+                     raise StepError('SPEECH_EMPTY_AUDIO')
+                 if playback_guard is not None and not playback_guard():
+                     raise StepError('NAVIGATION_GUIDANCE_EXPIRED')
++                timings['tts_prepare_ms'] = round((time.monotonic()-synthesis_started)*1000, 3)
++                playback_started = time.monotonic()
++                timings['speak_to_playback_start_ms'] = round((playback_started-started)*1000, 3)
++                if on_playback_start is not None:
++                    on_playback_start()
+                 await self.process([player, '-q', '-D', device, wav])
++                timings['playback_ms'] = round((time.monotonic()-playback_started)*1000, 3)
+         # Playback process completion is not a microphone verification of audibility.
+         return {'completed': True, 'action': 'SPEAK', 'prompt_key': params['prompt_key'],
+                 'source': 'AUDIO_CLIENT', 'actor_account_id': None, 'completed_at': utcnow(),
+                 'values': {'playback_completed': True, 'audible_verified': False,
+                            'engine': engine, 'device': device,
+-                           'language_code': data.get('language_code', 'vi')}}
++                           'language_code': data.get('language_code', 'vi'), 'timings_ms': timings}}
+diff --git a/PI_MAR/pi/mediassist/voice_chat.py b/PI_MAR/pi/mediassist/voice_chat.py
+index 10c2e71..2833d51 100644
+--- a/PI_MAR/pi/mediassist/voice_chat.py
++++ b/PI_MAR/pi/mediassist/voice_chat.py
+@@ -27,6 +27,7 @@ from .store import utcnow
+ from .voice_capture import recording_cue
+ from .voice_client import VoiceClient
+ from .voice_actions import VoiceActions,words
++from .voice_metrics import TurnMetrics,chat_options
+ 
+ INTRO='Xin chào, bạn cần MAR giúp gì không?'
+ GOODBYE='Phiên trò chuyện đã kết thúc. Khi cần hỗ trợ, hãy gọi MAR.'
+@@ -93,6 +94,7 @@ class AiClient:
+         if not isinstance(value,dict) or type(value.get('detected')) is not bool:raise StepError('VOICE_WAKE_INVALID_RESPONSE')
+         if value.get('phrase')!=self.config.get('wake',{}).get('phrase','Chào cậu'):
+             raise StepError('VOICE_WAKE_PHRASE_MISMATCH')
++        self.wake_processing_ms=value.get('processing_ms')
+         return value['detected']
+ 
+ 
+@@ -188,16 +190,22 @@ async def stop_process(proc):
+         await proc.communicate()
+ 
+ 
+-async def listen(player,start_timeout=8,max_seconds=15,threshold=.008):
+-    """Read ALSA raw PCM to bounded RAM, finish after 0.8 s of silence."""
++async def listen(player,start_timeout=8,max_seconds=15,threshold=.008,
++                 end_silence_ms=600,tail_silence_ms=150,min_speech_ms=360,metrics=None):
++    """Read PCM16/16k to RAM. Trim excess trailing silence before STT upload."""
+     recorder=shutil.which('arecord');output=shutil.which('aplay')
+     if not recorder or not output:raise StepError('VOICE_ALSA_TOOLS_MISSING')
+     device=audio_device(player.cfg);block_bytes=960;rate=16000
++    waiting=time.monotonic()
++    quiet_limit=math.ceil(end_silence_ms/30);voiced_min=math.ceil(min_speech_ms/30)
+     async with player.lock:
++        if metrics:metrics.elapsed('capture_audio_lock_wait_ms',waiting)
++        cue_started=time.monotonic()
+         with tempfile.TemporaryDirectory(prefix='mar-voice-cue-') as folder:
+             cue=Path(folder)/'ready.wav';cue.write_bytes(recording_cue())
+             await player.process([output,'-q','-D',device,str(cue)])
+         await asyncio.sleep(.15)
++        if metrics:metrics.elapsed('recording_cue_ms',cue_started)
+         with tempfile.TemporaryFile() as diagnostic:
+             proc=await asyncio.create_subprocess_exec(recorder,'-q','-D',device,'-t','raw','-f','S16_LE','-r',str(rate),'-c','1',
+                 stdin=asyncio.subprocess.DEVNULL,stdout=asyncio.subprocess.PIPE,stderr=diagnostic)
+@@ -208,24 +216,39 @@ async def listen(player,start_timeout=8,max_seconds=15,threshold=.008):
+                     try:block=await asyncio.wait_for(proc.stdout.readexactly(block_bytes),1.5)
+                     except (asyncio.IncompleteReadError,asyncio.TimeoutError):raise StepError('VOICE_MIC_STREAM_FAILED') from None
+                     active=rms(block)>=threshold;now=time.monotonic()
++                    if active and metrics:metrics.last_speech_at=now
+                     if speech_at is None:
+                         lead.append(block);lead=lead[-10:]
+                         if active:speech_at=now;blocks=list(lead);voiced=1
+                         elif now-started>=start_timeout:return None
+                     else:
+                         blocks.append(block);voiced+=int(active);quiet=0 if active else quiet+1
+-                        if (quiet>=27 and voiced>=12) or now-speech_at>=max_seconds:break
++                        if quiet>=quiet_limit or now-speech_at>=max_seconds:break
+             finally:await stop_process(proc)
+-    if voiced<12:return None
++    if voiced<voiced_min:return None
++    # Retain a short tail for phoneme boundaries, without uploading all the
++    # silence needed to decide that the speaker has finished.
++    trimmed=max(0,quiet-math.ceil(tail_silence_ms/30))
++    if trimmed:blocks=blocks[:-trimmed]
+     pcm=b''.join(blocks)[-rate*2*max_seconds:]
+     raw=io.BytesIO()
+     with wave.open(raw,'wb') as w:w.setnchannels(1);w.setsampwidth(2);w.setframerate(rate);w.writeframes(pcm)
++    if metrics:
++        metrics.values['uploaded_audio_ms']=round(len(pcm)/32,3)
++        metrics.values['trimmed_silence_ms']=trimmed*30
++        if metrics.last_speech_at is not None:
++            metrics.elapsed('speech_end_to_capture_end_ms',metrics.last_speech_at)
+     return raw.getvalue()
+ 
+ 
+-async def say(player,text,log_transcripts=True):
++async def say(player,text,log_transcripts=True,speech=None,metrics=None):
+     if log_transcripts:print('MAR:',text,flush=True)
+-    await player.speak(dict(action='SPEAK',prompt_key='VOICE_CHAT',data=dict(text=text[:500],language_code='vi',volume=70,speed_wpm=150)))
++    result=await player.speak(dict(action='SPEAK',prompt_key='VOICE_CHAT',
++        data=dict(text=text[:500],language_code='vi',**(speech or dict(volume=70,speed_wpm=170)))),
++        on_playback_start=metrics.playback_started if metrics else None)
++    if metrics:
++        for key,value in result.get('values',{}).get('timings_ms',{}).items():metrics.server(key,value)
++    return result
+ 
+ 
+ async def wait_wake(port):
+@@ -264,15 +287,16 @@ def controller_lock():
+         fcntl.flock(fd,fcntl.LOCK_UN);os.close(fd)
+ 
+ 
+-async def run_chat(worker,config_path,start_now=False,once=False,max_turns=10):
++async def run_chat(worker,config_path,start_now=False,once=False,max_turns=10,log_transcripts=True):
+     with controller_lock():
+-        return await conversation(worker,config_path,start_now,once,max_turns)
++        return await conversation(worker,config_path,start_now,once,max_turns,log_transcripts=log_transcripts)
+ 
+ 
+ async def conversation(worker,config_path,start_now=True,once=True,max_turns=10,
+                        initial_catalog=None,before_dispatch=None,log_transcripts=True,start_timeout=8):
+     """Called only while the CLI or managed voice daemon owns controller_lock."""
+     ai=AiClient(config_path);be=VoiceClient(worker);player=SpeechPlayer(worker['speech']);history=History(be,ai.marker)
++    capture_options,speech_options=chat_options(ai.config)
+     actions=VoiceActions(be,ai.config,ai.marker,before_dispatch)
+     stt_language=ai.config.get('stt_language','auto')
+     if stt_language not in ('vi','en','auto'):raise StepError('VOICE_LANGUAGE_UNSUPPORTED')
+@@ -282,30 +306,46 @@ async def conversation(worker,config_path,start_now=True,once=True,max_turns=10,
+     await asyncio.to_thread(history.recover)
+     while True:
+         if not start_now:await wait_for_wake(worker,ai)
++        startup=TurnMetrics(None,0,kind='session')
+         start_now=False
+         actions.pending=None
+-        sid=await asyncio.to_thread(history.start);print('VOICE_SESSION:',sid,flush=True)
+-        status='COMPLETED';turns=[];dispatched=False;ended=False
++        with startup.stage('history_start_ms'):
++            sid=await asyncio.to_thread(history.start)
++        startup.session_id=sid
++        print('VOICE_SESSION:',sid,flush=True)
++        status='COMPLETED';turns=[];dispatched=False;ended=False;metrics=None
+         try:
+-            candidates=initial_catalog['endpoints'] if initial_catalog is not None else await asyncio.to_thread(actions.candidates)
++            with startup.stage('catalog_ms'):
++                candidates=initial_catalog['endpoints'] if initial_catalog is not None else await asyncio.to_thread(actions.candidates)
+             initial_catalog=None
+-            await say(player,INTRO,log_transcripts)
+-            for _ in range(max_turns):
+-                raw=await listen(player,start_timeout=start_timeout)
+-                if raw is None:break
++            with startup.stage('greeting_ms'):
++                await say(player,INTRO,log_transcripts,speech=speech_options,metrics=startup)
++            startup.emit()
++            for turn_no in range(1,max_turns+1):
++                metrics=TurnMetrics(sid,turn_no)
++                with metrics.stage('capture_total_ms'):
++                    raw=await listen(player,start_timeout=start_timeout,**capture_options,metrics=metrics)
++                if raw is None:
++                    metrics.emit('NO_SPEECH');break
+                 received=utcnow()
+-                try:text=await asyncio.to_thread(be.transcribe,raw,stt_language)
++                try:
++                    with metrics.stage('stt_roundtrip_ms'):
++                        transcript=await asyncio.to_thread(be.transcribe_result,raw,stt_language)
++                    text=transcript['text']
++                    metrics.server('stt_server_ms',transcript.get('processingMs'))
+                 except StepError as error:
+                     if error.code not in ('STT_NO_RELIABLE_SPEECH','STT_TRANSCRIPT_INVALID','VOICE_CAPTURE_IS_SILENT'):
+                         raise
+                     print('VOICE_RETRY:',error.code,flush=True)
+-                    await say(player,'Tôi chưa nghe rõ. Bạn vui lòng nói lại sau tiếng bíp.',log_transcripts)
++                    metrics.emit('STT_RETRY')
++                    await say(player,'Tôi chưa nghe rõ. Bạn vui lòng nói lại sau tiếng bíp.',log_transcripts,speech=speech_options)
+                     continue
+                 finally:del raw
+                 if log_transcripts:print('USER:',text,flush=True)
+                 request_id=None
+                 ending=goodbye(text)
+-                handled=None if ending else await asyncio.to_thread(actions.consume,text)
++                with metrics.stage('action_check_ms'):
++                    handled=None if ending else await asyncio.to_thread(actions.consume,text)
+                 if ending:
+                     actions.pending=None;reply=GOODBYE
+                     result=dict(intent='FAREWELL',confidence=1.,sources=[],end_session=True)
+@@ -314,20 +354,30 @@ async def conversation(worker,config_path,start_now=True,once=True,max_turns=10,
+                     dispatched=bool(request_id)
+                     result=dict(intent='ESCORT_CONFIRMATION',confidence=1.,sources=[],end_session=bool(request_id))
+                 else:
+-                    result=await asyncio.to_thread(ai.ask,sid,text,turns,candidates)
++                    with metrics.stage('ai_roundtrip_ms'):
++                        result=await asyncio.to_thread(ai.ask,sid,text,turns,candidates)
++                    metrics.server('ai_server_ms',result.get('processing_ms'))
++                    for key,value in result.get('timings_ms',{}).items():metrics.server('ai_'+key,value)
+                     reply=result['speech_text']
+                     if result.get('action'):
+-                        reply=await asyncio.to_thread(actions.prepare,result['action'],sid)
+-                await say(player,reply,log_transcripts)
+-                await asyncio.to_thread(history.record,text,reply,result,received,
+-                    'RESOLVED' if result.get('action') or request_id else 'EXECUTED',request_id)
++                        with metrics.stage('action_prepare_ms'):
++                            reply=await asyncio.to_thread(actions.prepare,result['action'],sid)
++                await say(player,reply,log_transcripts,speech=speech_options,metrics=metrics)
++                with metrics.stage('history_roundtrip_ms'):
++                    await asyncio.to_thread(history.record,text,reply,result,received,
++                        'RESOLVED' if result.get('action') or request_id else 'EXECUTED',request_id)
++                metrics.emit()
+                 turns.extend([dict(role='user',content=text[:1000]),dict(role='assistant',content=reply[:1000])]);turns=turns[-8:]
+                 if result.get('end_session'):ended=True;break
+             else:print('VOICE_SESSION_MAX_TURNS',flush=True)
+-            if not dispatched and not ended:await say(player,GOODBYE,log_transcripts)
++            if not dispatched and not ended:await say(player,GOODBYE,log_transcripts,speech=speech_options)
+         except asyncio.CancelledError:
++            if not startup.emitted:startup.emit('CANCELLED')
++            if metrics and not metrics.emitted:metrics.emit('CANCELLED')
+             status='CANCELLED';raise
+         except BaseException:
++            if not startup.emitted:startup.emit('FAILED')
++            if metrics and not metrics.emitted:metrics.emit('FAILED')
+             status='FAILED';raise
+         finally:
+             try:await asyncio.shield(asyncio.to_thread(history.close,status))
+diff --git a/PI_MAR/pi/mediassist/voice_client.py b/PI_MAR/pi/mediassist/voice_client.py
+index f0e8e48..11e9607 100644
+--- a/PI_MAR/pi/mediassist/voice_client.py
++++ b/PI_MAR/pi/mediassist/voice_client.py
+@@ -100,9 +100,10 @@ class VoiceClient:
+     def transcribe(self,raw,language):
+         return self.transcribe_result(raw,language)['text']
+ 
+-    def synthesize(self,text,language):
++    def synthesize(self,text,language,speed_wpm=150):
+         if not 1<=len(text)<=500:raise StepError('VOICE_TTS_TEXT_REQUIRES_1_TO_500_CHARACTERS')
+-        body=json.dumps(dict(text=text,languageCode=language,speedWpm=150),ensure_ascii=False).encode()
++        if type(speed_wpm) is not int or not 80<=speed_wpm<=220:raise StepError('VOICE_TTS_SPEED_INVALID')
++        body=json.dumps(dict(text=text,languageCode=language,speedWpm=speed_wpm),ensure_ascii=False).encode()
+         start=time.monotonic();deadline=start+75
+         while True:
+             left=deadline-time.monotonic()
+diff --git a/PI_MAR/pi/mediassist/voice_wake.py b/PI_MAR/pi/mediassist/voice_wake.py
+index 05c20ca..b827384 100644
+--- a/PI_MAR/pi/mediassist/voice_wake.py
++++ b/PI_MAR/pi/mediassist/voice_wake.py
+@@ -3,6 +3,7 @@ import asyncio
+ from collections import deque
+ import math
+ import shutil
++import time
+ from .contracts import StepError
+ from .speech import audio_device
+ 
+@@ -11,7 +12,7 @@ FRAME_SECONDS = .03
+ FRAME_BYTES = int(SAMPLE_RATE * FRAME_SECONDS) * 2
+ 
+ 
+-async def capture_phrase(player,settings):
++async def capture_phrase(player,settings,metrics=None):
+     from .voice_chat import rms,stop_process
+     threshold = settings.get('vad_threshold', .008)
+     silence = settings.get('silence_sec', .45)
+@@ -45,6 +46,7 @@ async def capture_phrase(player,settings):
+                     raise StepError('VOICE_MIC_STREAM_FAILED') from None
+ 
+                 active = rms(frame) >= threshold
++                if active and metrics:metrics.last_speech_at=time.monotonic()
+                 quiet = 0 if active else quiet + 1
+                 if overlong:
+                     if quiet >= silence_frames:
+@@ -78,9 +80,18 @@ async def wait_phrase(player,ai,settings):
+         raise StepError('VOICE_WAKE_CONFIG_INVALID')
+     print(f'VOICE_WAKE_LISTENING: {phrase}', flush=True)
+     while True:
+-        pcm = await capture_phrase(player, settings)
++        from .voice_metrics import TurnMetrics
++        metrics=TurnMetrics(None,0,kind='wake')
++        with metrics.stage('wake_capture_total_ms'):
++            pcm = await capture_phrase(player, settings, metrics=metrics)
+         try:
+-            if await asyncio.to_thread(ai.detect_wake, pcm):
++            with metrics.stage('wake_roundtrip_ms'):
++                detected=await asyncio.to_thread(ai.detect_wake, pcm)
++            if detected:
++                metrics.server('wake_server_ms',getattr(ai,'wake_processing_ms',None))
++                if metrics.last_speech_at is not None:
++                    metrics.elapsed('wake_speech_end_to_detection_ms',metrics.last_speech_at)
++                metrics.emit()
+                 return
+         finally:
+             del pcm
+diff --git a/PI_MAR/pi/tools/test_speech.py b/PI_MAR/pi/tools/test_speech.py
+index a5a8b8f..e3473ea 100644
+--- a/PI_MAR/pi/tools/test_speech.py
++++ b/PI_MAR/pi/tools/test_speech.py
+@@ -159,7 +159,7 @@ class ManagedVoiceTests(unittest.IsolatedAsyncioTestCase):
+         self.assertTrue(goodbye('Không cần nữa.'));self.assertTrue(goodbye('Goodbye!'))
+         self.assertFalse(goodbye('Từ tạm biệt nghĩa là gì?'))
+         ai=N(config={'stt_language':'auto'},marker=Path('unused'),request=Mock(return_value={'state':'READY'}),ask=Mock())
+-        be=N(transcribe=Mock(return_value='Không cần nữa.'));history=Mock();history.start.return_value='session'
++        be=N(transcribe_result=Mock(return_value={'text':'Không cần nữa.'}));history=Mock();history.start.return_value='session'
+         with patch('mediassist.voice_chat.AiClient',return_value=ai),\
+              patch('mediassist.voice_chat.VoiceClient',return_value=be),\
+              patch('mediassist.voice_chat.SpeechPlayer'),\
+diff --git a/PI_MAR/tools/voice_audio.py b/PI_MAR/tools/voice_audio.py
+index 1bf4f50..e1084d8 100644
+--- a/PI_MAR/tools/voice_audio.py
++++ b/PI_MAR/tools/voice_audio.py
+@@ -82,14 +82,17 @@ def main():
+         p.add_argument('--input-device',default='auto');p.add_argument('--output',type=Path)
+         p.add_argument('--output-device',default='auto');p.add_argument('--play',action='store_true')
+         if name=='roundtrip':p.add_argument('--language',choices=('vi','en'),default='vi')
++        if name=='roundtrip':p.add_argument('--speed-wpm',type=int,choices=range(80,221),default=170)
+     p=commands.add_parser('stt');p.add_argument('--file',type=Path,required=True);p.add_argument('--language',choices=('vi','en'),default='vi')
+     p=commands.add_parser('tts');p.add_argument('--text',required=True);p.add_argument('--language',choices=('vi','en'),default='vi')
+     p.add_argument('--output-device',default='auto');p.add_argument('--output',type=Path);p.add_argument('--play',action='store_true')
++    p.add_argument('--speed-wpm',type=int,choices=range(80,221),default=170)
+     p=commands.add_parser('chat',help='Hello/wake -> BE STT -> laptop RAG -> BE TTS; user audio stays in RAM')
+     p.add_argument('--ai-config',type=Path,default=Path('/home/ubuntu/mar-secrets/voice-ai.json'))
+     p.add_argument('--start-now',action='store_true',help='Start one conversation without waiting for the hardware wake event')
+     p.add_argument('--once',action='store_true',help='Exit when the conversation ends instead of waiting for another wake')
+     p.add_argument('--max-turns',type=int,choices=range(1,21),default=10)
++    p.add_argument('--no-transcripts',action='store_true',help='Log timings without user/assistant speech text')
+     commands.add_parser('chat-daemon',help='Managed navigation idle listener; no extra ROS/MQTT worker')
+     args=parser.parse_args()
+     if args.action=='devices':
+@@ -110,7 +113,7 @@ def main():
+     if args.action=='chat':
+         import asyncio
+         from mediassist.voice_chat import run_chat
+-        asyncio.run(run_chat(cfg,args.ai_config,args.start_now,args.once,args.max_turns));return
++        asyncio.run(run_chat(cfg,args.ai_config,args.start_now,args.once,args.max_turns,log_transcripts=not args.no_transcripts));return
+     client=VoiceClient(cfg,verbose=True)
+     if args.action=='status':print(json.dumps(client.status(),ensure_ascii=False,indent=2));return
+     if args.action=='stt':
+@@ -121,7 +124,7 @@ def main():
+         text=client.transcribe(raw,args.language)
+     else:text=args.text
+     # Roundtrip repeats only the recognized text; it never dispatches its intent.
+-    output=client.synthesize(text,args.language);save_audio(args.output,output)
++    output=client.synthesize(text,args.language,args.speed_wpm);save_audio(args.output,output)
+     if args.play:playback(audio_device({'device':args.output_device}),output)
+ 
+ 
+diff --git a/PI_MAR/docs/voice-latency.md b/PI_MAR/docs/voice-latency.md
+new file mode 100644
+--- /dev/null
++++ b/PI_MAR/docs/voice-latency.md
+@@ -0,0 +1,176 @@
++# Voice: cấu hình thời gian và đưa vào stack Pi
++
++Ngày 07/11/2026. Bản sửa phát triển từ RASPPI_MAR main `e8d1ed6`.
++Đã kiểm tra bằng PCM giả lập, mạng giả lập và máy Windows; chưa chạy trên Pi/loa/micro thật.
++
++## Luồng đang dùng
++
++Pi nghe wake bằng firmware WonderEcho hoặc gửi PCM wake đến máy AI. Sau khi robot
++IDLE và backend xác nhận sẵn sàng, Pi mở phiên hội thoại, chào và phát bíp.
++Pi thu WAV PCM16 mono 16 kHz trong RAM, gửi BE `/api/v1/pi/speech/transcribe`;
++BE trả văn bản. Pi gửi văn bản và tối đa 8 tin lịch sử đến máy AI
++`/api/robot/chat`. Máy AI trả câu nói; Pi gọi BE `/api/v1/pi/speech/synthesize`,
++đợi WAV hợp lệ, kiểm tra hash, chỉnh âm lượng và chạy `aplay`. Phát xong mới ghi
++lịch sử văn bản về BE và nghe lượt tiếp theo.
++
++Đây là companion voice của stack navigation hiện có. Không chạy thêm VoiceEngine
++PC, ROS voice bridge hoặc một MQTT worker thứ hai cạnh companion này.
++
++## Những gì đã đổi
++
++- Kết thúc câu sau 600 ms im lặng, trước đây 27 khung × 30 ms = 810 ms. Bớt
++  210 ms trong điều kiện câu kết thúc bằng im lặng liên tục. Đây là thay đổi
++  ngưỡng trong code, chưa phải số đo phản hồi tổng trên robot.
++- Giữ 150 ms đuôi im lặng trong WAV gửi STT. So với đuôi cũ 810 ms, giảm khoảng
++  21.120 byte PCM mỗi câu đáp ứng điều kiện trên; thời gian truyền tiết kiệm
++  còn phụ thuộc mạng. Vẫn giữ phần tiếng nói và phần âm thanh trước khi bắt đầu nói.
++- Tiếng động ngắn dưới ngưỡng lời nói được loại sau khoảng im lặng; không giữ
++  micro đến giới hạn 15 giây chỉ vì có một tiếng động đầu tiên.
++- Hội thoại yêu cầu giọng đọc 170 WPM thay vì 150 WPM, chỉnh được trong file AI
++  riêng. Đây là tốc độ đọc; tốc độ di chuyển vẫn do cấu hình navigation quản lý.
++- WAV 16/32 bit dùng mảng mẫu âm thanh để chỉnh âm lượng, tránh đổi byte/số
++  cho từng mẫu. Giữ cách làm tròn, endian và kiểm tra WAV cũ. Không thêm thư viện.
++- Đo riêng chờ khóa micro/loa, bíp, thu âm, STT, AI, TTS, poll, chỉnh âm lượng,
++  phát loa và ghi lịch sử. Ghi `VOICE_TIMING` dạng JSON không chứa transcript/token/audio.
++- TTS tôn trọng `Retry-After` của BE. Khi không có số hợp lệ, poll mặc định
++  0,5 giây, chỉnh bằng `speech.poll_interval_sec` trong **worker config**.
++  Bản code BE đã đọc đặt 2 giây; nếu server trả header đó, Pi vẫn đợi 2 giây.
++  Chưa xác nhận header thực của bản BE đang deploy.
++
++## Cấu hình
++
++Mẫu không chứa bí mật: `pi/config/voice-ai.latency.example.json`. Chép và chỉnh
++**trên Pi** thành `/home/ubuntu/mar-secrets/voice-ai.json`. Giữ nguyên token/CA
++đã cấp nếu đã có file riêng, chỉ bổ sung `capture` và `speech`.
++
++```json
++{
++  "capture": {
++    "end_silence_ms": 600,
++    "tail_silence_ms": 150,
++    "min_speech_ms": 360,
++    "threshold": 0.008
++  },
++  "speech": {"speed_wpm": 170, "volume": 70}
++}
++```
++
++Người nói ngắt quãng có thể cần `end_silence_ms: 900`, giọng đọc chậm hơn
++`speed_wpm: 150` hoặc `160`. Mỗi khung âm thanh dài 30 ms nên ngưỡng im lặng
++được làm tròn lên theo khung. Không tự giảm xuống dưới 350 ms. `min_speech_ms`
++mặc định 360 ms; nếu câu xác nhận ngắn bị bỏ qua, thử 240–300 ms và kiểm tra
++tiếng ồn thực tế. Không giảm ngưỡng này chỉ để tăng tốc.
++
++`base_url` phải trỏ đến máy chạy AI HTTPS 7861 với tên/IP khớp chứng chỉ;
++token AI và public CA là file riêng. BE STT/TTS tiếp tục dùng Device JWT qua
++worker config `mapping`; OpenAI key chỉ ở server. Mẫu dùng wake serial;
++`local_ai` là nhận dạng wake ở **máy AI**, không có nghĩa mô hình chạy trên Pi.
++
++Worker config `pi/config/mqtt.worker.json` cần speech đã được cấp token và
++CA tương ứng, cùng cấu hình companion có sẵn:
++
++```json
++"voice_chat": {
++  "enabled": true,
++  "config_file": "/home/ubuntu/mar-secrets/voice-ai.json",
++  "idle_settle_sec": 2,
++  "start_timeout_sec": 12,
++  "max_turns": 10
++}
++```
++
++Khối `speech` trong worker quản lý engine, thiết bị ALSA, URL BE và token TTS.
++Khối `speech` trong `voice-ai.json` quản lý tốc độ/âm lượng **hội thoại**.
++Không chép đè cả worker config bằng ví dụ chỉ có vài trường ở đây.
++
++## Các bước chạy khi có robot
++
++1. Cập nhật cả AI_VOICE và bản Pi đã sửa. Trên máy AI cấu hình `.env`, môi
++   trường Python và TLS rồi chạy `run_robot_api.ps1`. `/health` phải READY.
++   `AI_PRELOAD_CLIENTS=true` chuẩn bị kết nối SDK khi khởi động, không gọi mô
++   hình; `AI_WAKE_PRELOAD=true` chỉ dùng khi đã cài model wake và bật wake AI.
++2. Trong MentorPi, user `ubuntu`, dùng thư mục cài đặt thực tế của nhóm. Ví dụ
++   bên dưới theo README hiện có. Kiểm tra cấu hình và dịch vụ:
++
++```sh
++cd /home/ubuntu/mediassist-mqtt-2026-10-08
++pi/.venv/bin/python tools/voice_latency.py check-config /home/ubuntu/mar-secrets/voice-ai.json
++pi/.venv/bin/python tools/voice_audio.py status
++```
++
++3. Thử hội thoại độc lập, chưa mở companion thường trực:
++
++```sh
++pi/.venv/bin/python tools/voice_audio.py chat --start-now --once --no-transcripts 2>&1 | tee /dev/shm/mar-voice-latency.log
++pi/.venv/bin/python tools/voice_latency.py summary /dev/shm/mar-voice-latency.log
++```
++
++`check-config` chỉ xác nhận tham số âm thanh, không chứng nhận mạng/loa/micro.
++Ví dụ để nghe so sánh cùng một câu ở tốc độ 170:
++
++```sh
++pi/.venv/bin/python tools/voice_audio.py tts --text 'Xin chào, bạn cần MAR giúp gì không?' --speed-wpm 170 --play
++```
++
++4. Đưa vào stack thường trực: mở phiên navigation từ trang map, dùng đúng
++   session ID được backend cấp. Công cụ `tools/run_navigation_session.py`
++   đã có `--voice-chat`; bật nó trên lệnh chạy đúng phiên, ví dụ:
++
++```sh
++pi/.venv/bin/python tools/run_navigation_session.py --session-id ID_PHIEN_THAT --voice-chat
++```
++
++Companion chờ IDLE, nhường âm thanh khi có job và được supervisor khởi động/dừng
++cùng navigation. Không mở CLI chat cùng lúc. Log thường trực:
++
++```sh
++pi/.venv/bin/python tools/voice_latency.py summary pi/state/stack/voice.log
++```
++
++## Đọc thời gian
++
++`summary` tách lượt thành công, không có lời nói, nhận dạng lại, lỗi và hủy;
++tính p50/p95 theo từng chặng, bỏ qua chặng chưa được đo. `events` chứa số đo
++khởi tạo phiên và wake AI được nhận đúng; wake serial phụ thuộc firmware nên
++không có số đo inference như wake AI.
++
++- `capture_total_ms`: từ lúc yêu cầu micro, qua bíp, chờ người nói, câu nói,
++  xác định hết câu và đóng tiến trình thu. Nó gồm thời gian người dùng nói.
++- `recording_cue_ms`: bíp 150 ms + đệm 150 ms + chi phí phát/khởi tạo thiết bị.
++- `speech_end_to_capture_end_ms`: từ khung có tiếng nói cuối theo VAD đến lúc
++  WAV sẵn sàng. Đây là ngưỡng im lặng cộng công việc hoàn tất thu âm.
++- `stt_roundtrip_ms`: kiểm tra WAV, gửi đến BE, chờ STT và nhận văn bản.
++  `stt_server_ms` lấy từ `processingMs` của BE, nếu có.
++- `ai_roundtrip_ms`: gửi text/lịch sử/catalog tới AI và nhận đáp án.
++  `ai_classify_ms`, `ai_navigation_ms`, `ai_rag_retrieval_ms`,
++  `ai_rag_generation_ms` do AI server trả về. Chặng không chạy thì không có số.
++- `tts_http_total_ms`: tổng thời gian các HTTP request lấy WAV; có thể bao gồm
++  mạng và xử lý BE. `tts_poll_wait_ms` là phần ngủ chờ giữa các lần poll.
++- `tts_volume_and_file_ms`: chuẩn hóa WAV, chỉnh âm lượng, tạo file phát tạm.
++- `tts_prepare_ms`: toàn bộ lấy/tạo WAV và chuẩn bị file, gồm các chặng TTS trên.
++- `speech_end_to_playback_start_ms`: chỉ số chính: từ tiếng nói cuối theo VAD
++  đến lúc gọi `aplay`. Cần kiểm tra bằng âm thanh thực để biết lúc loa thật phát.
++- `playback_ms`: thời gian chạy trình phát; chưa chứng minh loa nghe được.
++- `history_roundtrip_ms`: báo cáo BE sau khi phát xong; ảnh hưởng lúc nghe
++  lượt tiếp theo, không nằm trong khoảng chờ tới âm thanh trả lời đầu tiên.
++- `turn_total_ms`: toàn lượt, gồm câu người dùng nói và toàn bộ câu robot đọc.
++
++Các trường tổng và thành phần **chồng lấp nhau**; không cộng tất cả cột.
++Ví dụ `ai_server_ms` nằm trong `ai_roundtrip_ms`; `tts_http_total_ms` và
++`tts_poll_wait_ms` nằm trong `tts_prepare_ms`. Phần `transport_and_pi_overhead`
++là hiệu roundtrip và server, gồm mạng/TLS, xử lý Pi và phần server chưa đo;
++không phải số đo riêng tốc độ Internet. Không trừ timestamp đồng hồ hai máy.
++
++Giới hạn thu 15 giây, chờ có tiếng nói 12 giây của companion, timeout AI/STT
++và TTS là giới hạn, không phải thời gian mọi lượt đều tiêu tốn.
++
++## Đo lại CPU trên Pi
++
++```sh
++pi/.venv/bin/python tools/voice_latency.py bench-pcm --iterations 30
++```
++
++Đây chỉ đo chỉnh âm lượng của WAV mẫu 5 giây; không có micro, mạng hoặc loa.
++Lấy ít nhất 20–30 lượt hội thoại thật, ghi cả lượt đầu và lượt đã dùng cache,
++so cùng câu hỏi/độ dài câu trả lời, mạng và giọng đã chọn trước khi kết luận
++tổng thời gian robot đã giảm bao nhiêu.
+diff --git a/PI_MAR/pi/config/voice-ai.latency.example.json b/PI_MAR/pi/config/voice-ai.latency.example.json
+new file mode 100644
+--- /dev/null
++++ b/PI_MAR/pi/config/voice-ai.latency.example.json
+@@ -0,0 +1,22 @@
++{
++  "base_url": "https://VOICE-SERVER:7861",
++  "token_file": "/home/ubuntu/mar-secrets/voice-ai.token",
++  "ca_file": "/home/ubuntu/mar-secrets/voice-ai-ca.pem",
++  "stt_language": "auto",
++  "actions_enabled": false,
++  "wake_serial": "/dev/wonderecho",
++  "wake": {
++    "mode": "serial",
++    "phrase": "Chào cậu"
++  },
++  "capture": {
++    "end_silence_ms": 600,
++    "tail_silence_ms": 150,
++    "min_speech_ms": 360,
++    "threshold": 0.008
++  },
++  "speech": {
++    "speed_wpm": 170,
++    "volume": 70
++  }
++}
+diff --git a/PI_MAR/pi/mediassist/voice_metrics.py b/PI_MAR/pi/mediassist/voice_metrics.py
+new file mode 100644
+--- /dev/null
++++ b/PI_MAR/pi/mediassist/voice_metrics.py
+@@ -0,0 +1,106 @@
++"""Per-turn monotonic measurements. Logs contain no audio, speech text or secrets."""
++from contextlib import contextmanager
++import json
++import math
++import re
++import statistics
++import time
++
++from .contracts import StepError
++
++
++def chat_options(config):
++    capture = config.get('capture', {})
++    speech = config.get('speech', {})
++    if not isinstance(capture, dict) or not isinstance(speech, dict):
++        raise StepError('VOICE_CHAT_AUDIO_CONFIG_INVALID')
++    defaults = dict(end_silence_ms=600, tail_silence_ms=150, min_speech_ms=360, threshold=.008)
++    limits = dict(end_silence_ms=(350, 1500), tail_silence_ms=(0, 300),
++                  min_speech_ms=(180, 1000), threshold=(.001, .1))
++    capture = {key: capture.get(key, value) for key, value in defaults.items()}
++    for key, value in capture.items():
++        if (type(value) not in (int, float) or not math.isfinite(value)
++                or not limits[key][0] <= value <= limits[key][1]):
++            raise StepError('VOICE_CHAT_AUDIO_CONFIG_INVALID')
++    speech = dict(speed_wpm=speech.get('speed_wpm', 170), volume=speech.get('volume', 70))
++    if (type(speech['speed_wpm']) is not int or not 80 <= speech['speed_wpm'] <= 220
++            or type(speech['volume']) is not int or not 0 <= speech['volume'] <= 100):
++        raise StepError('VOICE_CHAT_AUDIO_CONFIG_INVALID')
++    return capture, speech
++
++
++class TurnMetrics:
++    def __init__(self, session_id, turn_no, kind='turn'):
++        self.session_id = session_id
++        self.turn_no = turn_no
++        self.kind = kind
++        self.started = time.monotonic()
++        self.last_speech_at = None
++        self.values = {}
++        self.emitted = False
++
++    def elapsed(self, name, start):
++        self.values[name] = round(max(0., time.monotonic() - start) * 1000, 3)
++
++    @contextmanager
++    def stage(self, name):
++        start = time.monotonic()
++        try:
++            yield
++        finally:
++            self.elapsed(name, start)
++
++    def playback_started(self):
++        # Marks aplay invocation, not the first audible sample from the speaker.
++        if self.last_speech_at is not None:
++            self.elapsed('speech_end_to_playback_start_ms', self.last_speech_at)
++
++    def server(self, prefix, value):
++        if type(value) in (int, float) and math.isfinite(value) and value >= 0:
++            self.values[prefix] = value
++
++    def emit(self, status='COMPLETED'):
++        self.emitted = True
++        for prefix in ('ai','stt'):
++            outer=self.values.get(prefix+'_roundtrip_ms')
++            inner=self.values.get(prefix+'_server_ms')
++            if outer is not None and inner is not None and outer>=inner:
++                self.values[prefix+'_transport_and_pi_overhead_ms']=round(outer-inner,3)
++        self.elapsed(self.kind+'_total_ms', self.started)
++        record = dict(schema_version=1, session_id=self.session_id, turn_no=self.turn_no,
++                      status=status, kind=self.kind, measurements_ms=dict(self.values))
++        print('VOICE_TIMING ' + json.dumps(record, separators=(',', ':')), flush=True)
++        return record
++
++
++def summarize_records(records):
++    """Keep successful, silent, failed and cancelled turns in separate groups."""
++    groups = {}
++    for row in records:
++        if not isinstance(row, dict) or row.get('schema_version') != 1:
++            continue
++        status = row.get('status')
++        if status not in ('COMPLETED', 'NO_SPEECH', 'STT_RETRY', 'FAILED', 'CANCELLED'):
++            continue
++        kind = row.get('kind','turn')
++        if kind not in ('turn','session','wake'):continue
++        group = groups.setdefault((kind,status), dict(turns=0, samples={}))
++        group['turns'] += 1
++        values = row.get('measurements_ms', {})
++        if not isinstance(values, dict):continue
++        for key, value in values.items():
++            if (isinstance(key, str) and re.fullmatch(r'[a-z][a-z0-9_]*_ms', key)
++                    and type(value) in (int, float) and math.isfinite(value) and value >= 0):
++                group['samples'].setdefault(key, []).append(value)
++    result = {};events = {}
++    for (kind,status), group in groups.items():
++        stages = {}
++        for key, samples in sorted(group['samples'].items()):
++            ordered = sorted(samples)
++            stages[key] = dict(samples=len(samples), p50_ms=round(statistics.median(samples),3),
++                p95_ms=round(ordered[math.ceil(.95*len(samples))-1],3), max_ms=round(ordered[-1],3))
++        target = result if kind=='turn' else events.setdefault(kind,{})
++        target[status] = dict(turns=group['turns'], stages=stages)
++    output = dict(scope='Pi monotonic spans; playback start is aplay invocation, not verified audible sound', by_status=result)
++    if events:output['events']=events
++    return output
+diff --git a/PI_MAR/pi/tools/test_voice_latency.py b/PI_MAR/pi/tools/test_voice_latency.py
+new file mode 100644
+--- /dev/null
++++ b/PI_MAR/pi/tools/test_voice_latency.py
+@@ -0,0 +1,168 @@
++"""No robot/network/audio device. Exercise PCM boundaries and timing contracts."""
++import asyncio
++from contextlib import redirect_stdout
++import io
++import json
++from pathlib import Path
++import struct
++import sys
++from types import SimpleNamespace as NS
++import unittest
++from unittest.mock import AsyncMock, Mock, patch
++import wave
++
++sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
++from mediassist.contracts import StepError
++from mediassist.voice_metrics import TurnMetrics, chat_options, summarize_records
++from mediassist.voice_chat import listen
++from mediassist.cloud_speech import PendingAudio, download, volume_wav
++from mediassist.speech import SpeechPlayer
++from mediassist.voice_client import VoiceClient
++
++
++class VoiceLatencyTests(unittest.IsolatedAsyncioTestCase):
++    def test_audio_config_defaults_and_bounds(self):
++        capture,speech=chat_options({})
++        self.assertEqual(capture['end_silence_ms'],600)
++        self.assertEqual(speech['speed_wpm'],170)
++        for bad in ({'capture':{'end_silence_ms':0}}, {'capture':{'threshold':float('nan')}},
++                    {'capture':{'tail_silence_ms':True}}, {'speech':{'speed_wpm':221}},
++                    {'speech':{'speed_wpm':150.5}}, {'speech':{'volume':101}}, {'speech':[]}):
++            with self.subTest(bad=bad),self.assertRaises(StepError):chat_options(bad)
++        self.assertEqual(chat_options({'speech':{'speed_wpm':150},'capture':{'end_silence_ms':900}})[1]['speed_wpm'],150)
++
++    async def capture(self, voiced, silence, **settings):
++        blocks=[struct.pack('<h',1000)*480]*voiced+[b'\0'*960]*silence
++        stream=NS(readexactly=AsyncMock(side_effect=blocks))
++        proc=NS(stdout=stream)
++        player=NS(cfg={'device':'fake-device'},lock=asyncio.Lock(),process=AsyncMock())
++        metrics=TurnMetrics('fixture',1)
++        with patch('mediassist.voice_chat.shutil.which',side_effect=lambda x:'/mock/'+x),\
++             patch('mediassist.voice_chat.asyncio.create_subprocess_exec',new=AsyncMock(return_value=proc)),\
++             patch('mediassist.voice_chat.stop_process',new=AsyncMock()) as stop,\
++             patch('mediassist.voice_chat.asyncio.sleep',new=AsyncMock()),redirect_stdout(io.StringIO()):
++            raw=await listen(player,metrics=metrics,**settings)
++        stop.assert_awaited_once_with(proc)
++        return raw,metrics,stream
++
++    async def test_silence_end_and_trim_preserve_voiced_samples(self):
++        raw,metrics,stream=await self.capture(12,20)
++        self.assertEqual(stream.readexactly.await_count,32)  # 12 speech + 20*30 ms silence
++        with wave.open(io.BytesIO(raw),'rb') as wav:
++            pcm=wav.readframes(wav.getnframes())
++            self.assertEqual(wav.getnframes(),17*480)  # retain only 150 ms tail
++            self.assertEqual(pcm[:12*960],struct.pack('<h',1000)*(12*480))
++            self.assertEqual(pcm[12*960:],b'\0'*(5*960))
++        self.assertEqual(metrics.values['trimmed_silence_ms'],450)
++        self.assertEqual(metrics.values['uploaded_audio_ms'],510)
++
++    async def test_short_noise_ends_after_silence_instead_of_waiting_max_15_seconds(self):
++        raw,_,stream=await self.capture(1,20)
++        self.assertIsNone(raw)
++        self.assertEqual(stream.readexactly.await_count,21)
++
++    async def test_longer_end_silence_profile_is_configurable(self):
++        raw,_,stream=await self.capture(12,30,end_silence_ms=900)
++        self.assertIsNotNone(raw)
++        self.assertEqual(stream.readexactly.await_count,42)
++
++    def test_pcm_volume_fast_path_matches_original_rounding_for_all_widths(self):
++        for width in (1,2,3,4):
++            signed=width!=1
++            values=[0,1,15,127,128,255] if width==1 else [-(2**(width*8-1)), -11,-1,0,1,11,2**(width*8-1)-1]
++            frames=b''.join(x.to_bytes(width,'little',signed=signed) for x in values)
++            out=io.BytesIO()
++            with wave.open(out,'wb') as wav:
++                wav.setnchannels(1);wav.setsampwidth(width);wav.setframerate(24000);wav.writeframes(frames)
++            for volume in (0,30,70,100):
++                with self.subTest(width=width,volume=volume):
++                    expected=[round((x-(128 if width==1 else 0))*volume/100)+(128 if width==1 else 0) for x in values]
++                    with wave.open(io.BytesIO(volume_wav(out.getvalue(),volume)),'rb') as result:
++                        actual=result.readframes(len(values))
++                    self.assertEqual(actual,b''.join(x.to_bytes(width,'little',signed=signed) for x in expected))
++
++    async def test_tts_honors_retry_after_and_shorter_fallback(self):
++        for pending,interval in ((PendingAudio(2),2),(PendingAudio(),.5),(None,.5)):
++            with patch('mediassist.cloud_speech.fetch_once',side_effect=[pending,b'audio']),\
++                 patch('mediassist.cloud_speech.asyncio.sleep',new=AsyncMock()) as sleep:
++                timing={}
++                self.assertEqual(await download({'wait_timeout_sec':5},{'text':'test'},timings=timing),b'audio')
++                self.assertAlmostEqual(sleep.await_args.args[0],interval,places=1)
++                self.assertIn('tts_poll_wait_ms',timing)
++
++    def test_timing_log_does_not_contain_transcripts_and_summary_separates_statuses(self):
++        metric=TurnMetrics('fixture-id',1)
++        metric.last_speech_at=metric.started
++        metric.playback_started()
++        metric.server('stt_roundtrip_ms',500)
++        metric.server('stt_server_ms',400)
++        metric.server('bad_ms',float('nan'))
++        with redirect_stdout(io.StringIO()) as out:record=metric.emit()
++        self.assertTrue(metric.emitted)
++        self.assertNotIn('bad_ms',record['measurements_ms'])
++        self.assertEqual(record['measurements_ms']['stt_transport_and_pi_overhead_ms'],100)
++        self.assertEqual(json.loads(out.getvalue().split('VOICE_TIMING ')[1])['session_id'],'fixture-id')
++        failed=dict(schema_version=1,status='FAILED',measurements_ms={'stt_roundtrip_ms':9999})
++        summary=summarize_records([record,failed,{'rawText':'private transcript'}])
++        self.assertEqual(summary['by_status']['COMPLETED']['stages']['stt_roundtrip_ms']['p50_ms'],500)
++        self.assertEqual(summary['by_status']['FAILED']['turns'],1)
++        self.assertNotIn('private transcript',str(summary))
++
++    def test_summary_keeps_session_and_wake_separate_from_turns(self):
++        rows=[dict(schema_version=1,kind=kind,status='COMPLETED',measurements_ms={kind+'_total_ms':10})
++              for kind in ('turn','session','wake')]
++        result=summarize_records(rows)
++        self.assertEqual(result['by_status']['COMPLETED']['turns'],1)
++        self.assertEqual(result['events']['wake']['COMPLETED']['turns'],1)
++        self.assertNotIn('session_total_ms',result['by_status']['COMPLETED']['stages'])
++
++    async def test_playback_callback_and_tts_timings_preserve_audio_contract(self):
++        out=io.BytesIO()
++        with wave.open(out,'wb') as wav:
++            wav.setnchannels(1);wav.setsampwidth(2);wav.setframerate(16000);wav.writeframes(b'\x10\x00'*100)
++        player=SpeechPlayer({'enabled':True,'engine':'be-tts','device':'fake'})
++        events=[]
++        async def play(_argv,content=None):events.append('play')
++        player.process=play
++        params={'action':'SPEAK','prompt_key':'TEST','data':{'text':'Xin chào','speed_wpm':170}}
++        with patch('mediassist.speech.shutil.which',return_value='/mock/aplay'),\
++             patch('mediassist.cloud_speech.download',new=AsyncMock(return_value=out.getvalue())):
++            result=await player.speak(params,on_playback_start=lambda:events.append('start'))
++        self.assertEqual(events,['start','play'])
++        self.assertTrue(result['values']['playback_completed'])
++        self.assertFalse(result['values']['audible_verified'])
++        self.assertIn('tts_prepare_ms',result['values']['timings_ms'])
++        self.assertIn('playback_ms',result['values']['timings_ms'])
++
++    def test_cli_speed_is_sent_to_backend(self):
++        out=io.BytesIO()
++        with wave.open(out,'wb') as wav:
++            wav.setnchannels(1);wav.setsampwidth(2);wav.setframerate(16000);wav.writeframes(b'\x10\x00'*100)
++        client=VoiceClient.__new__(VoiceClient);client.verbose=False
++        client.request=Mock(return_value=(200,{'Content-Type':'audio/wav'},out.getvalue()))
++        self.assertEqual(client.synthesize('Xin chào','vi',170),out.getvalue())
++        self.assertEqual(json.loads(client.request.call_args.args[1])['speedWpm'],170)
++        with self.assertRaises(StepError):client.synthesize('Xin chào','vi',999)
++
++    async def test_conversation_confirmation_keeps_receipt_and_avoids_rag(self):
++        from mediassist.voice_chat import conversation
++        ai=NS(config={},marker=Path('unused'),request=Mock(return_value={'state':'READY'}),ask=Mock())
++        be=NS(transcribe_result=Mock(return_value={'text':'xác nhận','processingMs':1}))
++        history=Mock();history.start.return_value='session'
++        actions=Mock();actions.consume.return_value=('Đã tiếp nhận.','receipt')
++        with patch('mediassist.voice_chat.AiClient',return_value=ai),\
++             patch('mediassist.voice_chat.VoiceClient',return_value=be),\
++             patch('mediassist.voice_chat.SpeechPlayer'),\
++             patch('mediassist.voice_chat.VoiceActions',return_value=actions),\
++             patch('mediassist.voice_chat.History',return_value=history),\
++             patch('mediassist.voice_chat.listen',new=AsyncMock(return_value=b'pcm')),\
++             patch('mediassist.voice_chat.say',new=AsyncMock()) as say,redirect_stdout(io.StringIO()):
++            dispatched=await conversation({'speech':{}},'unused',initial_catalog={'endpoints':[]},log_transcripts=False)
++        self.assertTrue(dispatched)
++        ai.ask.assert_not_called()
++        self.assertEqual(history.record.call_args.args[-2:],('RESOLVED','receipt'))
++        self.assertEqual(say.await_args_list[-1].kwargs['speech']['speed_wpm'],170)
++        history.close.assert_called_once_with('COMPLETED')
++
++
++if __name__ == '__main__':unittest.main(verbosity=2)
+diff --git a/PI_MAR/tools/voice_latency.py b/PI_MAR/tools/voice_latency.py
+new file mode 100644
+--- /dev/null
++++ b/PI_MAR/tools/voice_latency.py
+@@ -0,0 +1,66 @@
++"""Offline voice timing summary, audio-config check and PCM processing benchmark."""
++import argparse
++import io
++import json
++import math
++from pathlib import Path
++import statistics
++import sys
++import time
++import wave
++
++ROOT = Path(__file__).resolve().parents[1]
++sys.path.insert(0, str(ROOT/'pi'))
++from mediassist.voice_metrics import chat_options, summarize_records
++
++
++def records(paths):
++    count = 0
++    for path in paths:
++        with path.open(encoding='utf-8', errors='replace') as source:
++            for line in source:
++                marker = line.find('VOICE_TIMING ')
++                if marker < 0 or len(line) > 16384:continue
++                try:value = json.loads(line[marker+13:])
++                except ValueError:continue
++                count += 1
++                if count > 100000:raise ValueError('At most 100000 timing records per summary')
++                yield value
++
++
++def benchmark(count):
++    from mediassist.cloud_speech import volume_wav
++    out = io.BytesIO()
++    with wave.open(out, 'wb') as wav:
++        wav.setnchannels(1);wav.setsampwidth(2);wav.setframerate(24000)
++        wav.writeframes(b'\x10\x00'*120000)
++    raw = out.getvalue();samples = []
++    for _ in range(count):
++        start = time.perf_counter();volume_wav(raw, 70)
++        samples.append((time.perf_counter()-start)*1000)
++    return dict(fixture='5 s PCM16 mono 24 kHz; volume 70%; local CPU only', samples=count,
++        p50_ms=round(statistics.median(samples),3),p95_ms=round(sorted(samples)[math.ceil(.95*count)-1],3))
++
++
++def main():
++    parser = argparse.ArgumentParser(description=__doc__)
++    commands = parser.add_subparsers(dest='command', required=True)
++    p = commands.add_parser('summary');p.add_argument('logs', type=Path, nargs='+')
++    p = commands.add_parser('check-config');p.add_argument('config', type=Path)
++    p = commands.add_parser('bench-pcm');p.add_argument('--iterations', type=int, default=30)
++    p.add_argument('--output', type=Path)
++    args = parser.parse_args()
++    if args.command == 'summary':
++        result = summarize_records(records(args.logs))
++    elif args.command == 'check-config':
++        capture, speech = chat_options(json.loads(args.config.read_text(encoding='utf-8-sig')))
++        result = dict(audio_settings_valid=True, hardware_verified=False, capture=capture, speech=speech)
++    else:
++        if not 10 <= args.iterations <= 10000:parser.error('--iterations must be 10..10000')
++        result = benchmark(args.iterations)
++    output = json.dumps(result, ensure_ascii=False, indent=2)
++    if getattr(args, 'output', None):args.output.write_text(output, encoding='utf-8')
++    print(output)
++
++
++if __name__ == '__main__':main()

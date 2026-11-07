@@ -47,7 +47,32 @@ def model_exists(path: Path) -> bool:
 def status() -> dict:
     enabled, phrase, aliases, model_path = settings()
     return dict(enabled=enabled, phrase=phrase, aliases=list(aliases), engine=ENGINE,
-                configured=bool(normalize(phrase)) and model_exists(model_path))
+                configured=bool(normalize(phrase)) and model_exists(model_path),
+                loaded=_recognizer is not None and _model_path == model_path)
+
+
+def _load_recognizer(model_path):
+    """Caller owns _lock. Kept separate so preload does not decode fake audio."""
+    global _recognizer, _model_path
+    if _recognizer is None or _model_path != model_path:
+        from sherpa_onnx import OfflineRecognizer
+
+        if not model_exists(model_path):
+            raise RuntimeError('VOICE_WAKE_MODEL_MISSING')
+        files = {key: str(model_path / name) for key, name in MODEL_FILES.items()}
+        _recognizer = OfflineRecognizer.from_transducer(
+            **files, num_threads=2, sample_rate=SAMPLE_RATE, feature_dim=80,
+        )
+        _model_path = model_path
+    return _recognizer
+
+
+def preload():
+    enabled, _, _, model_path = settings()
+    if enabled:
+        with _lock:
+            _load_recognizer(model_path)
+    return status()
 
 
 def detect(pcm: bytes) -> dict:
@@ -71,19 +96,10 @@ def detect(pcm: bytes) -> dict:
 
     started = time.monotonic()
     with _lock:
-        if _recognizer is None or _model_path != model_path:
-            from sherpa_onnx import OfflineRecognizer
-
-            if not model_exists(model_path):
-                raise RuntimeError('VOICE_WAKE_MODEL_MISSING')
-            files = {key: str(model_path / name) for key, name in MODEL_FILES.items()}
-            _recognizer = OfflineRecognizer.from_transducer(
-                **files, num_threads=2, sample_rate=SAMPLE_RATE, feature_dim=80,
-            )
-            _model_path = model_path
-        stream = _recognizer.create_stream()
+        recognizer = _load_recognizer(model_path)
+        stream = recognizer.create_stream()
         stream.accept_waveform(SAMPLE_RATE, samples)
-        _recognizer.decode_stream(stream)
+        recognizer.decode_stream(stream)
         result['detected'] = normalize(stream.result.text) in expected
     result['processing_ms'] = round((time.monotonic() - started) * 1000)
     return result

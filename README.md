@@ -1,273 +1,123 @@
-# MediAssistRover — AI Voice + AI té ngã + Backend
+# MediAssistRover — AI Voice, FAQ và kết nối robot
 
-**Luồng đang tích hợp với robot:** dùng repo `C:\GitHub\BE_MAR` và BE đã
-deploy tại `https://mediassistrover.duckdns.org`. Xem phần **Chạy hội thoại
-trực tiếp với Pi** ở cuối trang. Chỉ chạy `run_web.ps1` và
-`run_robot_api.ps1` cho lượt thử voice; không khởi động thêm BE/MQTT từ
-thư mục `backend/` của repo AI vì có thể tranh phiên điều khiển robot.
+AI Voice trả lời thông tin bệnh viện bằng FAQ đã duyệt hoặc tài liệu có nguồn. Repo còn chứa BE Java, camera/té ngã và cầu nối ROS 2. Raspberry Pi đảm nhiệm mic, loa và chương trình phần cứng; không cần chạy toàn bộ BE trên Pi.
 
-> Hệ thống hợp nhất tại `D:\AI_VOic22222`. Hướng dẫn chính: [UNIFIED_SYSTEM_GUIDE.md](docs/UNIFIED_SYSTEM_GUIDE.md).
-> Lưu trữ và báo staff: [VISION_STORAGE_AND_DELIVERY.md](docs/VISION_STORAGE_AND_DELIVERY.md).
+Tài liệu mô tả **bản cập nhật 07/11/2026**, phát hành trên nhánh `main`, phát triển tiếp từ `81c1508`. Đồng đội cập nhật cả code và tài liệu trong commit mới; việc push lên GitHub không tự triển khai lên server hoặc robot.
 
-```text
-AI_VOic22222/
-├── src/
-│   ├── main.py, voice_engine.py, audio/, stt/, intent/, rag/, tts/, web/  # Voice
-│   ├── vision/
-│   │   ├── core/           # Pose, theo dõi, detector toàn thân/thân dưới
-│   │   ├── integration/    # Device JWT REST, SQLite outbox, receipt
-│   │   ├── web/            # Camera dashboard
-│   │   └── tools/          # Đánh giá video, camera streamer
-│   └── platform/           # Khởi chạy và trang mở chung
-├── backend/                # API, MySQL, Voice, Vision, trang staff
-├── config/                 # voice_config.json và system.json
-├── models/vision/          # Trọng số nhận diện
-├── data/                   # Kiến thức Voice và runtime Vision riêng
-├── mentorpi_ws/            # Cầu nối ROS 2 hiện có
-├── tests/                  # Voice + Vision + launcher
-├── run_system.ps1          # Một lệnh khởi chạy
-└── setup_system.ps1        # Cài hai môi trường Python riêng
-```
+## Đọc theo nhu cầu
 
-```powershell
-.\run_system.ps1 -Check
-.\run_system.ps1 -Profile local -Source "0"
-```
+- [Đối chiếu: đã có từ repo, đã sửa thêm gì, số đo và giới hạn](docs/VOICE_CHANGELOG_2026-11-07.md).
+- [Cài lại và nối Raspberry Pi với AI, BE, mic và loa](docs/RASPBERRY_PI_VOICE_SETUP.md).
+- [Chạy cả BE bằng Docker Compose](backend/RUN_ALL.md).
+- [Nhập, duyệt và thử FAQ](docs/FAQ_GUIDE.md).
+- [Đọc độ trễ và tối ưu từng bước](docs/voice-latency.md).
+- [Voice + Vision trên laptop](docs/UNIFIED_SYSTEM_GUIDE.md); [camera quản trị](docs/ADMIN_FALL_CAMERA_GUIDE.md).
 
-Trang mở chung: http://127.0.0.1:7800. Integrated dùng chung Backend và danh tính
-thiết bị; mặc định chỉ gửi quan sát mô phỏng. Mô hình té ngã chưa được train lại
-cho camera thấp; tích hợp không có nghĩa đã đạt độ chính xác vận hành.
+## Những cập nhật chính
 
-Phần bên dưới giữ tài liệu Voice chi tiết và các lệnh cũ để tương thích.
+- **Kho FAQ riêng `data/faqs.json`:** nhiều cách hỏi cho một đáp án, duyệt/tắt/sửa/xóa/thử khớp. Câu công khai đã duyệt được trả trực tiếp, bỏ qua model sinh đáp án.
+- **Sửa FAQ trượt khi có lịch sử:** phép khớp không phụ thuộc history; cache đáp án AI vẫn phân biệt history và thay đổi nguồn.
+- **Cập nhật FAQ không cần Re-index/restart:** ghi file nguyên tử, kiểm tra revision khi lưu, nhận thay đổi ở lượt tiếp theo. Các tiến trình phải dùng cùng file/thư mục mount.
+- **Gộp BE và Voice/FAQ:** Compose chạy Java, Python headless, MySQL và Qdrant. FE gọi Java; không phải mở web Voice/Studio để dùng FAQ.
+- **Dùng lại kết nối:** tái sử dụng OpenAI SDK/HTTP pool của Python, tùy chọn chuẩn bị client/model wake trước, bổ sung thời gian từng chặng và chế độ trả lời của API robot.
+- **Thêm cách hỏi mic thực nhận:** `wi-fi`/`wifi`, “bệnh viện có xe lăn không”/“có cho mượn xe lăn không”. Không dùng fuzzy matching để tự đoán câu y tế gần giống.
+- **Gói bàn giao Pi:** tối ưu VAD, đuôi im lặng, tốc độ đọc, WAV và công cụ đo nằm ở **RASPPI_MAR**, không nằm trong container Voice. Xem [deploy/pi](deploy/pi/README.md).
 
+API robot HTTPS, wake tiếng Việt, RAG/cache cũ và ROS bridge đã có từ repo; không tính toàn bộ là chức năng mới. Chi tiết nằm trong [bản đối chiếu](docs/VOICE_CHANGELOG_2026-11-07.md).
 
-> **Phân hệ Trợ lý Giọng nói Tiếng Việt thông minh cho Robot Bệnh viện MediAssistRover**  
-> Tích hợp trực tiếp với cơ sở dữ liệu bệnh viện (`HospitalInformationArticle` & `HospitalInformation` trong MySQL) và Backend Spring Boot 3.5 qua Device JWT Bearer Authentication.
+## Chạy BE + Voice/FAQ trên máy tính
 
-## Thành phần tích hợp
-
-Repository này chứa đầy đủ ba phần của trợ lý giọng nói:
-
-- `src/`: AI Voice service Python hiện có.
-- `backend/`: Backend Spring Boot, MySQL/Qdrant RAG, upload/OCR tài liệu, STT/TTS và các trang HTML kiosk/admin/staff.
-- `mentorpi_ws/`: ROS 2 package `mediassist_voice_bridge` để kết nối MentorPi M1 với backend. Phần này không cần chạy khi thử nghiệm hoàn toàn trên máy tính.
-
-Để thử nghiệm giao diện máy tính, chạy Docker Compose trong `backend/`, sau đó mở `http://localhost:8080/assistant-kiosk.html`. Không commit file `.env`; hãy sao chép cấu hình từ `.env.example` tại từng thành phần.
-
----
-
-## 🌟 1. Tổng quan Kiến trúc
-
-AI Voice Module biến Robot MediAssistRover thành một trợ lý giao tiếp trực tiếp với bệnh nhân và người nhà tại sảnh bệnh viện:
-- **Kiến trúc RAG & Vector Database ("Vector P"):** Tự động đọc và vector hóa toàn bộ tài liệu Word (`.docx`), PDF (`.pdf`), Markdown (`.md`) và dữ liệu bài viết từ MySQL Database (`HospitalInformationArticle`) thành các Vector Points ($P \in \mathbb{R}^d$), lưu trữ bền vững tại `data/hospital_vector_store.json`.
-- **Nghe hiểu tiếng Việt:** Chuyển đổi giọng nói thành văn bản thông qua Whisper STT hoặc Google Cloud STT với thuật toán Voice Activity Detection (VAD) nhận diện khi bệnh nhân bắt đầu và kết thúc câu nói.
-- **Phân loại ý định 2 tầng:**
-  - **Tầng 1 (Sub-millisecond):** Keyword & Regex Pattern Matching siêu tốc tiếng Việt cho các yêu cầu thường gặp (hỏi thông tin, dẫn đường, cấp cứu, chào hỏi).
-  - **Tầng 2 (LLM Fallback):** OpenAI GPT-4o-mini xử lý các câu hỏi phức tạp hoặc mơ hồ.
-- **Truy xuất thông tin Bệnh viện thời gian thực:** Kết nối với Backend Spring Boot (`GET /api/v1/hospital-information` & `HospitalInformationQueryService`) để trả lời giờ làm việc, chi phí, thủ tục, khoa phòng, bác sĩ, bảo hiểm y tế.
-- **Tạo yêu cầu Dẫn đường (Escort Request):** Khi bệnh nhân yêu cầu *"Dẫn tôi đến phòng khám nội"*, hệ thống tự động bóc tách thực thể phòng (`P_KHAM_NOI_01`) và kích hoạt quy trình dẫn đường trên Robot.
-- **Báo động Khẩn cấp (SOS):** Khi phát hiện tiếng kêu cứu, ngất, té ngã, hệ thống kích hoạt chuông báo và điều phối điều dưỡng khẩn cấp.
-- **Phản hồi bằng Giọng nói Tự nhiên (TTS):** Sử dụng `OpenAiTtsService` (`gpt-4o-mini-tts`, giọng `coral`) của Backend với bộ nhớ đệm WAV cache trên đĩa để robot trả lời tức thì.
-
----
-
-## 📁 2. Cấu trúc Thư mục Source Code
-
-```text
-d:\AI_VOICE\
-├── .env.example               # Mẫu cấu hình môi trường
-├── requirements.txt           # Danh mục thư viện Python
-├── README.md                  # Hướng dẫn tổng quan
-├── run_voice.ps1              # Script khởi động nhanh PowerShell
-├── run_voice.bat              # Script khởi động nhanh Windows CMD
-├── run_web.ps1                # Khởi động Giao diện Web Studio (PowerShell)
-├── run_web.bat                # Khởi động Giao diện Web Studio (Windows CMD)
-├── config/
-│   └── voice_config.json      # Cấu hình âm thanh, STT, intent, prompts
-├── src/
-│   ├── __init__.py
-│   ├── main.py                # Entry point (hỗ trợ cả --text và voice mode)
-│   ├── voice_engine.py        # Bộ điều phối luồng Voice Pipeline toàn diện
-│   ├── web/                   # GIAO DIỆN WEB STUDIO TRỰC QUAN (FastAPI)
-│   │   ├── __init__.py
-│   │   └── app.py             # Dashboard kéo thả docx/pdf, chat voice, inspector
-│   ├── rag/                   # TẦNG RAG & VECTOR DATABASE ('VECTOR P')
-│   │   ├── __init__.py
-│   │   ├── document_loader.py # Đọc file Word (.docx), PDF, Markdown, MySQL API
-│   │   ├── chunker.py         # Cắt đoạn thông minh tiếng Việt (chunk_size: 400)
-│   │   ├── embeddings.py      # OpenAI / Gemini / Local Subword N-Gram Embeddings
-│   │   ├── vector_store.py    # Vector Database bền vững, tính Cosine Similarity
-│   │   ├── rag_pipeline.py    # Prompt Augmentation & Sinh câu trả lời TTS
-│   │   └── build_index.py     # Script nạp và cập nhật cơ sở dữ liệu Vector P
-│   ├── api/                   # Tầng giao tiếp Backend Spring Boot
-│   │   ├── __init__.py        # BackendClient (Quản lý Device JWT, Speech, Query)
-│   │   └── voice_reporter.py  # VoiceReporter (Lưu VoiceInteraction & VoiceCommand)
-│   ├── audio/                 # Tầng thu âm và phát loa
-│   │   ├── __init__.py        # MicrophoneCapture (VAD, tự ngắt khi im lặng)
-│   │   └── player.py          # SoundDevice WAV playback
-│   ├── intent/                # Tầng phân loại ý định
-│   │   └── __init__.py        # IntentClassifier (Regex + Bóc tách thực thể + LLM)
-│   ├── query/                 # Tầng tra cứu dữ liệu
-│   │   └── __init__.py        # HospitalQueryHandler (Kết nối DB bệnh viện)
-│   ├── stt/                   # Tầng Speech-to-Text
-│   │   └── __init__.py        # STTBase, WhisperSTT, GoogleSTT
-│   ├── tts/                   # Tầng Text-to-Speech
-│   │   └── __init__.py        # SpeechClient (Gọi BE TTS, phát âm thanh)
-│   └── utils/                 # Tiện ích chung
-│       ├── __init__.py
-│       ├── envelope.py        # Bộ đóng gói PiEnvelope v1.0 chuẩn hợp đồng BE
-│       └── logger.py          # Logging chuẩn với Rich
-├── data/
-│   ├── documents/             # Nơi chứa tài liệu Word (.docx), PDF, Markdown
-│   │   ├── so_tay_benh_nhan_mediassist.docx
-│   │   └── quy_trinh_kham_va_bac_si.md
-│   └── hospital_vector_store.json # Cơ sở dữ liệu Vector P bền vững
-├── tests/                     # 40 Unit Tests tự động (40/40 Passed)
-│   ├── test_intent.py         # Test nhận diện ý định tiếng Việt (20 test cases)
-│   ├── test_rag.py            # Test RAG Pipeline & Vector DB (9 test cases)
-│   ├── test_query.py          # Test tra cứu dữ liệu bệnh viện
-│   ├── test_voice_engine.py   # Test dispatching luồng Engine
-│   └── test_web.py            # Test toàn diện API Giao diện Web Studio (6 test cases)
-└── docs/
-    ├── AI_VOICE_ARCHITECTURE_AND_INTEGRATION_GUIDE.md  # Tài liệu tích hợp hệ thống
-    └── RAG_VECTOR_PIPELINE_ARCHITECTURE.md             # Tài liệu chuyên sâu về RAG & Vector P
-```
-
----
-
-## 🚀 3. Hướng dẫn Cài đặt & Khởi chạy
-
-### Bước 1: Chuẩn bị môi trường Python 3.11+
-```powershell
-cd d:\AI_VOICE
-py -3.11 -m venv venv
-.\venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-```
-
-### Bước 2: Thiết lập biến môi trường
-Tạo file `.env` từ `.env.example`:
-```dotenv
-BACKEND_URL=http://localhost:8080
-ROBOT_CODE=ROBOT_MAR_01
-DEVICE_SECRET=6rGL6RPV9VgbVZfmcHXmA2uz-oST8speM1bO1eI1ozg
-STT_PROVIDER=whisper
-OPENAI_API_KEY=sk-proj-your-api-key
-VOICE_LANGUAGE=vi-VN
-```
-
-### Bước 3: Chạy Unit Tests để kiểm tra
-```powershell
-py -3.11 -m pytest tests -v
-# Kết quả: 40 passed in 6.49s
-```
-
-### Bước 4: Khởi chạy Trợ lý Voice & Giao diện Trực quan
-
-**Cách 1: Giao diện Web Studio Trực quan (Khuyến nghị để kiểm thử & nạp tài liệu):**
-```powershell
-# Bằng PowerShell:
-.\run_web.ps1
-
-# Hoặc bằng file BAT:
-run_web.bat
-```
-Truy cập trình duyệt tại: **`http://localhost:7860`**
-- Kéo thả file Word (`.docx`), PDF (`.pdf`), Markdown (`.md`) trực tiếp vào màn hình.
-- AI tự động cắt đoạn (chunking), tính toán vector và nạp vào Vector Database ("Vector P") tức thì.
-- Thử nghiệm gõ hỏi đáp, nói qua micro trình duyệt hoặc phát giọng nói ra loa laptop.
-- Xem chi tiết Intent, độ tin cậy và trích dẫn tài liệu gốc.
-
-**Cách 2: Menu điều khiển tổng hợp `run_voice.bat`:**
-Chạy `run_voice.bat` và chọn:
-- `1` : Voice Mode (Microphone + Loa Laptop)
-- `2` : Text Mode (Bàn phím Console)
-- `3` : Web GUI Studio (`http://localhost:7860`)
-- `4` : Chạy toàn bộ 40 Unit Tests
-
-**Cách 3: Chế độ Console bàn phím (Text Mode):**
-```powershell
-py -3.11 -m src.main --text
-```
-
-**Cách 4: Chế độ Giọng nói thực tế (Voice Mode qua Microphone & Loa):**
-```powershell
-py -3.11 -m src.main
-```
-
----
-
-## 🔗 4. Bảng Tra cứu Ý định (Intents) & Hành động
-
-| Intent Code | Câu nói mẫu của bệnh nhân | Hành động của Robot |
-|:---|:---|:---|
-| `QUERY_HOSPITAL_INFO` | *"Giờ khám bệnh mấy giờ?", "Bệnh viện có bảo hiểm y tế không?", "Khoa nội ở tầng mấy?"* | Query `HospitalInformationArticle` từ MySQL ➔ Tổng hợp câu trả lời ➔ Phát giọng nói TTS |
-| `ESCORT_REQUEST` | *"Dẫn tôi đến phòng khám nội", "Nhà thuốc ở đâu?", "Chỉ đường đến xét nghiệm"* | Bóc tách thực thể phòng (`P_KHAM_NOI_01`) ➔ Tạo lệnh dẫn đường ➔ Báo bệnh nhân đi theo |
-| `EMERGENCY_SOS` | *"Cứu tôi với!", "Tôi bị ngã", "Khó thở quá, cấp cứu!"* | Bật còi báo động ➔ Gửi Incident SOS về trung tâm điều dưỡng ➔ Phát âm thanh trấn an |
-| `GREETING` | *"Xin chào", "Chào robot", "Hello"* | Phát lời chào thân thiện kèm giới thiệu trợ lý |
-| `FAREWELL` | *"Cảm ơn robot nhé", "Tạm biệt"* | Phát lời chúc sức khỏe |
-| `SELF_INTRO` | *"Bạn là ai?", "Bạn làm được những việc gì?"* | Giới thiệu chức năng robot trong bệnh viện |
-# Chạy hội thoại trực tiếp với Pi
-
-Workspace hiện tại: `C:\GitHub\AI_VOICE`. Repo Pi tương ứng nằm ở
-`C:\GitHub\RASPPI_MAR\PI_MAR`; BE ở `C:\GitHub\BE_MAR`.
-
-Từ PowerShell trong repo AI:
+Máy đã cấu hình `backend/.env`, có Docker đang chạy:
 
 ```powershell
-Set-ExecutionPolicy -Scope Process Bypass
-.\run_web.ps1
+cd D:\AI_VOic22222\backend
+docker compose up -d --build
+docker compose ps
 ```
 
-Studio tại http://127.0.0.1:7860 dùng để thêm DOCX/PDF/MD/TXT và reindex.
-Trong một terminal khác, chạy `.\run_robot_api.ps1` để mở API HTTPS 7861
-cho Pi. Hai lệnh chỉ khởi động ứng dụng AI, không chạy thêm BE/MQTT/ROS.
-Nếu API cổng 7861 đã READY, launcher dùng lại dịch vụ đó, không mở bản thứ hai.
+Bản clone mới cần tạo `.env`, khóa riêng và tài khoản theo [RUN_ALL.md](backend/RUN_ALL.md). Không dùng lại mật khẩu/danh tính robot của người khác từ README.
 
-API robot: `POST /api/robot/chat`, Bearer `AI_ROBOT_API_TOKEN`, body gồm
-`session_id`, `turn_id`, `text`, `language: "vi"` và tối đa 8 tin lịch sử.
-Có thể gửi `destinations` lấy từ BE của phiên map hiện tại (ID, mã/tên điểm,
-tên phòng nếu có). Nhận lệnh Việt, Anh hoặc câu trộn ngôn ngữ. Tên điểm khớp
-rõ được xử lý nhanh; câu chưa rõ được model đối chiếu với chính danh mục đó,
-không dùng bảng a/b/c hay mã phòng cố định để tạo lệnh. AI chỉ đề xuất một ID
-trong danh mục; Pi/BE xác minh lại map và đọc tên điểm trước khi xác nhận.
-API trả lời/ngữ cảnh/đề xuất điểm đến, không tự điều khiển robot. Token riêng,
-OpenAI key và TLS private key không được commit. CA công khai phải được Pi
-tin cậy; địa chỉ LAN trong chứng chỉ phải khớp `base_url` của Pi.
+- BE: `http://127.0.0.1:8080`; kiểm tra `GET /actuator/health`.
+- Python Voice/FAQ: `http://voice:8000` **chỉ trong mạng Compose**, không mở cổng 8000 ra host.
+- MySQL/Qdrant giữ dữ liệu trong volume; thư mục `data/` được mount vào Python.
+- FE ở repo **FE_WEB_MAR**, chạy riêng, đặt `VITE_API_BASE_URL` tới BE trên. Cần bản FE có phần quản lý FAQ mới.
+- Kiosk có trong BE: `http://127.0.0.1:8080/assistant-kiosk.html`. Phải bật cờ trợ lý và khai báo robot được phép. Chạy container không tự cấp quyền điều khiển robot.
 
-`C:\GitHub\AI_VOICE\.env` giữ `OPENAI_API_KEY`, `AI_RESPONSE_MODEL`, `AI_INTENT_MODEL` và
-`AI_ROBOT_API_TOKEN` cho RAG/intent. STT/TTS hiện do BE EC2 gọi OpenAI với key
-trong `/etc/mediassistrover/backend.env` (`STT_ENABLED=true`,
-`TTS_ENABLED=true`); chúng chưa chuyển vào dịch vụ AI laptop. Pi chỉ giữ
-token riêng và CA trong `/home/ubuntu/mar-secrets/voice-ai.json`, không giữ
-OpenAI key. Mở phiên map trên HTML, chuẩn bị `WF_VOICE_ENDPOINT_V1`, rồi chạy
-navigation với `voice_chat.enabled=true`. Stack quản lý listener cùng phiên
-map. MOVE thành công mới chuyển sang step SPEAK báo đã tới nơi.
+Dừng và chạy lại, giữ dữ liệu:
 
-Wake **“Chào cậu”** dùng [Zipformer tiếng Việt của sherpa-onnx](https://k2-fsa.github.io/sherpa/onnx/pretrained_models/offline-transducer/zipformer-transducer-models.html).
-Giải nén model `sherpa-onnx-zipformer-vi-30M-int8-2026-02-09` vào thư mục
-`%LOCALAPPDATA%\MediAssistRover\voice-ai\models`, cài dependency trong
-`requirements.txt`, rồi đặt `AI_WAKE_ENABLED=true` trong `.env`. Có thể đặt
-`AI_WAKE_ALIASES=Chào bạn` để nhận thêm câu này. Khởi động lại
-`run_robot_api.ps1`. Trên Pi, đặt `wake.mode=local_ai` và
-`wake.phrase="Chào cậu"` trong cấu hình riêng `voice-ai.json`. Kiểm tra
-`/health` có `wake.enabled=true` và `wake.configured=true`.
+```powershell
+docker compose stop
+docker compose start
+```
 
-Index dùng `data/hospital_vector_store.json` với `EMBEDDING_PROVIDER=local`:
-vector băm từ khóa 384 chiều, không có OpenAI `vs_...` ID. Chất lượng tìm
-kiếm phụ thuộc tài liệu và từ khóa; đây chưa phải embedding ngữ nghĩa được
-huấn luyện. Cấu hình robot hiện dùng `AI_RESPONSE_MODEL=gpt-6-astra` cho RAG
-và `AI_INTENT_MODEL=gpt-6-luna` để hiểu lệnh chưa rõ, `AI_REASONING_EFFORT=low`.
-Câu khớp rõ tên endpoint không cần gọi LLM. Các model gọi OpenAI, vì vậy
-dịch vụ chạy ở laptop vẫn cần Internet. STT/TTS do BE xử lý; Pi chỉ thu/phát.
+Sau sửa code, chạy lại `docker compose up -d --build`. `down -v` xóa volume database, không dùng để dừng thông thường.
 
-Thử trên Pi bằng user ubuntu, không cần stack chuyển động:
+## Dữ liệu bệnh viện lấy ở đâu?
+
+Luồng **FE/kiosk → Java**:
+
+1. Java hỏi Python xem có khớp FAQ đã duyệt không.
+2. Không khớp: Java tìm tài liệu/bài thông tin trong **MySQL/Qdrant của BE đang chạy**, rồi nhờ AI soạn câu có nguồn.
+3. Java không có nguồn: thử `data/hospital_vector_store.json` của Python cho câu hỏi công khai phù hợp. Không có bằng chứng nguồn thì Java từ chối câu ngoài phạm vi.
+
+Luồng **Pi native → API robot 7861** dùng FAQ/vector trên máy AI, không đi qua Java `AssistantService` để tìm đáp án. BE vẫn thực hiện STT, TTS, lịch sử và yêu cầu hành động của Pi.
+
+- `data/faqs.json`: nguồn FAQ, class đọc/ghi `src/rag/faq_store.py`.
+- `data/documents/`: Word/PDF/Markdown đầu vào, không được tự đọc lại mỗi lượt hỏi.
+- `data/hospital_vector_store.json`: chỉ mục đã tạo. Sửa Word cần lập chỉ mục lại; Python headless trong Compose cần restart sau khi thay chỉ mục vì nạp vector lúc startup.
+- Tài liệu upload qua FE/Java lưu trong volume `knowledge-files`, MySQL và Qdrant; không tự xuất thành file vector Python hoặc FAQ.
+
+Dữ liệu mẫu trong repo phục vụ dự án. Nhóm phải xác nhận đúng bệnh viện, phiên bản, giá, giờ khám và liên hệ trước vận hành; bật FAQ không tự biến tài liệu mẫu thành thông tin của bệnh viện thực.
+
+## Server đang triển khai
+
+- [Swagger](https://mediassistrover.duckdns.org/swagger-ui/index.html).
+- [Map và điều khiển](https://mediassistrover.duckdns.org/mapping.html).
+
+**Không tự đồng bộ server vào AI local.** Kiểm tra 07/11/2026: API public `GET /api/v1/public/hospital-information` trả 0 mục; OpenAPI chưa công bố các endpoint `/assistant` như BE local. Chưa xác minh dữ liệu nội bộ vì cần quyền riêng.
+
+Client Python cũ chỉ đọc trang đầu `/api/v1/hospital-information`, chưa lấy `/{hospitalId}/articles`, và gửi `search` không có trong hợp đồng danh sách nhân viên của server. Đổi `BACKEND_URL` đơn thuần chưa sửa các điểm này. Không coi FAQ local hay BE mới là đã deploy.
+
+`mapping.html` phục vụ bản đồ/nhiệm vụ. Các bài `articles` mới là nguồn cần nối đầy đủ nếu muốn đồng bộ thông tin bệnh viện server vào AI.
+
+## Mic/loa và hội thoại Pi
+
+Chọn **một** chương trình quản lý mic/loa:
+
+1. **Pi đang chạy navigation RASPPI_MAR:** dùng companion native của repo đó. Cần AI HTTPS 7861, BE STT/TTS và Device JWT; thử `tools/voice_audio.py` rồi bật `--voice-chat` trong đúng phiên navigation. Đây là luồng được tối ưu VAD/WAV trong đợt này.
+2. **ROS bridge `mentorpi_ws/`:** gửi WAV tới Java `/api/v1/pi/assistant`, không gọi trực tiếp 7861. Cần BE đã có endpoint trợ lý và bật Pi bridge. Ngưỡng VAD/tốc độ ở bridge khác native; không áp số 600 ms/170 WPM cho bridge.
+
+Theo [hướng dẫn Pi](docs/RASPBERRY_PI_VOICE_SETUP.md) để kiểm tra phần cứng, dependencies, token/CA/TLS, thiết bị và nghe thử. **Pull AI_VOICE không tự cập nhật RASPPI_MAR hoặc tải model wake.**
+
+## Số đo và giới hạn
+
+Đã truy vết hai lượt trong DB local:
+
+- Xe lăn: trước thêm alias, gọi model và BE ghi **8.461 ms**. Thử sau qua API kiosk: **26 ms HTTP**, BE **8 ms**, `model=null`.
+- Wi-Fi: trước **3.903 ms** ở BE khi gọi model. Sau thêm alias: **28 ms HTTP**, BE **9 ms**, `model=null`.
+
+Đây là lượt đo riêng trên Windows, không phải p50/p95 hay cam kết tốc độ. Lượt sau gửi **text**, chưa gồm nhận giọng nói, chờ im lặng, tạo/tải WAV hoặc phát loa. FAQ giảm bước tìm/sinh đáp án, không loại bỏ các bước còn lại.
+
+Kiểm tra lại 07/11/2026: **100 bài Python AI đạt**, **31 bài Pi đạt, 1 bỏ qua** do thiếu fixture BE. Java `AssistantServiceTest` có 7 bài đạt ở lượt kiểm chứng Compose. Chưa có robot để chứng nhận mic/loa, wake, mạng hoặc phần cứng thật.
+
+## Thư mục cần biết
+
+- `src/service/`: Python headless cho Compose/RPC Java.
+- `src/web/robot_api.py`, `src/web/wake.py`: API Pi native và wake tùy chọn trên máy AI.
+- `src/web/app.py`, `run_web.ps1`, `run_faq.ps1`: Studio laptop tùy chọn 7860, nhập tài liệu/FAQ và thử riêng.
+- `src/rag/`: FAQ, tài liệu, vector và pipeline đáp án.
+- `src/model_client.py`, `src/latency.py`: pool kết nối và đồng hồ đo.
+- `src/main.py`, `src/voice_engine.py`: mic/loa PC cũ, không phải companion Pi.
+- `backend/`: Java, xác thực, database, knowledge ingestion, STT/TTS, Compose.
+- `mentorpi_ws/`: ROS bridge có sẵn; `deploy/pi/`: gói bàn giao native Pi.
+- `src/vision/`, `models/vision/`: camera/té ngã, không nằm trong đường FAQ.
+
+## Kiểm thử Voice
+
+Trong môi trường đã cài `requirements.txt`:
 
 ```sh
-cd /home/ubuntu/mediassist-mqtt-2026-10-08
-pi/.venv/bin/python tools/voice_audio.py chat --start-now --once
+python -m pytest tests/test_intent.py tests/test_rag.py tests/test_voice_latency.py tests/test_integration_readiness.py tests/test_voice_engine.py tests/test_robot_api_latency.py tests/test_tts_admin_settings.py tests/test_faq.py tests/test_faq_launcher.py tests/test_system_launcher.py tests/test_headless_voice.py tests/test_backend_local_launcher.py -q
 ```
 
-Nói sau bíp. Âm thanh thu trên Pi chỉ giữ trong RAM cho STT, không lưu WAV
-người dùng lâu dài. BE lưu hội thoại chữ; không gọi API lưu audio lên S3.
-RAG robot không tự thay câu trả lời lỗi model bằng một câu trả lời giả.
+`.env` của từng thành phần chứa cấu hình riêng. Giữ OpenAI key ở máy AI/BE; Pi chỉ cần token thiết bị, token AI và CA công khai tương ứng. Không đưa khóa bí mật vào repo hoặc ảnh hướng dẫn.

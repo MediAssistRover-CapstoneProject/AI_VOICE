@@ -1,7 +1,8 @@
 ﻿param([ValidateRange(1,65535)][int]$Port=7861)
 $ErrorActionPreference='Stop'
 $env:PYTHONIOENCODING='utf-8'
-$voicePython=Join-Path $PSScriptRoot '.venv\Scripts\python.exe'
+$voicePython=Join-Path $PSScriptRoot '.venv-voice\Scripts\python.exe'
+if(-not(Test-Path -LiteralPath $voicePython)){$voicePython=Join-Path $PSScriptRoot '.venv\Scripts\python.exe'}
 $tls=Join-Path $env:LOCALAPPDATA 'MediAssistRover\voice-ai'
 foreach($file in @($voicePython,(Join-Path $tls 'ca.pem'),(Join-Path $tls 'server.pem'),(Join-Path $tls 'server.key'))){
     if(-not(Test-Path -LiteralPath $file)){throw "Required voice runtime file is missing: $file"}

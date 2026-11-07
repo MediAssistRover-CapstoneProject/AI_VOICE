@@ -1,0 +1,10 @@
+FROM python:3.11-slim
+WORKDIR /app
+COPY backend/requirements.voice.txt /tmp/requirements.txt
+RUN pip install --no-cache-dir -r /tmp/requirements.txt \
+    && useradd --system --uid 10001 appuser \
+    && mkdir /app/data && chown appuser /app/data
+COPY src /app/src
+USER appuser
+EXPOSE 8000
+CMD ["python","-m","uvicorn","src.service.voice_api:app","--host","0.0.0.0","--port","8000"]

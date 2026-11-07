@@ -151,7 +151,9 @@ def build_plan(root: Path, config: dict, env: dict[str, str], *, profile: str = 
                 service_env["VISION_MODEL"] = str(root / section.get("model", "models/vision/yolov8n-pose.onnx"))
         python = choose_python(root, name, override or section.get("python", "auto"))
         host, port = section.get("host", "127.0.0.1"), section["port"]
-        plans.append(ServicePlan(name, (python, "-m", "uvicorn", module, "--host", host, "--port", str(port)),
+        command = ((python, '-m', 'src.platform.faq_launcher', '--port', str(port), '--no-browser', '--supervised')
+                   if name == 'voice' else (python, '-m', 'uvicorn', module, '--host', host, '--port', str(port)))
+        plans.append(ServicePlan(name, command,
                                  root, service_env, f"http://{host}:{port}"))
     return plans
 
@@ -224,6 +226,8 @@ class Supervisor:
 def dashboard_handler(supervisor: Supervisor, profile: str, backend: str):
     page = Path(__file__).with_name("dashboard.html").read_bytes()
     links = {"kiosk": backend + "/assistant-kiosk.html", "staff": backend + "/vision-staff.html"}
+    voice = next((p for p in supervisor.plans if p.name == 'voice'), None)
+    if voice:links['faq'] = voice.url.rstrip('/') + '/faq'
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *args):

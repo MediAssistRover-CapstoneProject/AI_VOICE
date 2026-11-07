@@ -1,0 +1,23 @@
+{
+  "base_repository": "https://github.com/MediAssistRover-CapstoneProject/RASPPI_MAR",
+  "base_commit": "e8d1ed6ba350508cd771c150a0a0baf4d64feee6",
+  "repository_code_directory": "PI_MAR",
+  "patch": "RASPPI_MAR-e8d1ed6-voice-latency.patch",
+  "sha256": "2a94842161a8c17167c1b827a08dd6d2544c2d934d5a032c4b4cff89b42145ef",
+  "files": [
+    "PI_MAR/pi/mediassist/cloud_speech.py",
+    "PI_MAR/pi/mediassist/speech.py",
+    "PI_MAR/pi/mediassist/voice_chat.py",
+    "PI_MAR/pi/mediassist/voice_client.py",
+    "PI_MAR/pi/mediassist/voice_wake.py",
+    "PI_MAR/pi/tools/test_speech.py",
+    "PI_MAR/tools/voice_audio.py",
+    "PI_MAR/docs/voice-latency.md",
+    "PI_MAR/pi/config/voice-ai.latency.example.json",
+    "PI_MAR/pi/mediassist/voice_metrics.py",
+    "PI_MAR/pi/tools/test_voice_latency.py",
+    "PI_MAR/tools/voice_latency.py"
+  ],
+  "verification": "git apply --check and apply at isolated repository root; resulting text equals audited Pi files",
+  "hardware_tested": false
+}
