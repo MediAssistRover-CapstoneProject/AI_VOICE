@@ -1,0 +1,29 @@
+[Unit]
+Description=MediAssistRover Robot Voice AI
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+User=marvoice
+Group=marvoice
+WorkingDirectory=/opt/mar-voice/current
+Environment=AI_DATA_DIR=/var/lib/mar-voice/data
+Environment=AI_WAKE_MODEL_PATH=/var/lib/mar-voice/wake-model
+Environment=AI_WAKE_PRELOAD=true
+Environment=PYTHONDONTWRITEBYTECODE=1
+EnvironmentFile=/etc/mediassistrover/voice-ai.env
+ExecStart=/opt/mar-voice/current/.venv/bin/python -B -m uvicorn src.web.robot_api:app --host 0.0.0.0 --port 7861 --workers 1 --no-access-log
+Restart=on-failure
+RestartSec=3
+CPUWeight=25
+CPUQuota=100%
+MemoryHigh=1G
+MemoryMax=1536M
+TasksMax=96
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+
+[Install]
+WantedBy=multi-user.target

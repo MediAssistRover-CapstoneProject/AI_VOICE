@@ -1,8 +1,10 @@
 """Authenticated RAG and local wake recognition. No MQTT, DB or motion ownership."""
 from __future__ import annotations
+import asyncio
 import hashlib
 import hmac
 import json
+import logging
 import os
 from pathlib import Path
 import threading
@@ -22,14 +24,22 @@ from src.intent import IntentClassifier,endpoint_destination
 from src.model_options import completion_options
 from src.model_client import ReusableOpenAIClient
 from src.latency import StageTimings
-from src.rag.faq_store import FAQStore, FAQDataError, faq_allowed
+from src.rag.faq_store import FAQStore, FAQDataError, faq_allowed, question_key
+from src.rag.published_knowledge import PublishedKnowledge
 import unicodedata
 
-INDEX=ROOT/'data/hospital_vector_store.json'
-store=HospitalVectorStore(create_embeddings(os.getenv('EMBEDDING_PROVIDER','local'),openai_api_key=os.getenv('OPENAI_API_KEY','')),INDEX)
+DATA_DIR=Path(os.getenv('AI_DATA_DIR') or ROOT/'data')
+INDEX=DATA_DIR/'hospital_vector_store.json'
+hospital_id=os.getenv('AI_HOSPITAL_ID','').strip()
+demo_id=os.getenv('AI_DEMO_HOSPITAL_ID','').strip()
+demo_hospital_id=UUID(demo_id) if demo_id else None
+published=(PublishedKnowledge(os.getenv('BACKEND_URL',''),hospital_id,int(os.getenv('AI_KNOWLEDGE_REFRESH_SEC','30')))
+           if hospital_id else None)
+store=HospitalVectorStore(create_embeddings(os.getenv('EMBEDDING_PROVIDER','local'),
+                          openai_api_key=os.getenv('OPENAI_API_KEY','')),None if published else INDEX)
 model=os.getenv('AI_RESPONSE_MODEL','gpt-6-astra')
 intent_model=os.getenv('AI_INTENT_MODEL','gpt-6-luna')
-faq_store=FAQStore(ROOT/'data/faqs.json')
+faq_store=None if published else FAQStore(DATA_DIR/'faqs.json')
 rag=HospitalRAGPipeline(store,llm_provider='openai',openai_api_key=os.getenv('OPENAI_API_KEY',''),llm_model=model,require_model=True,faq_store=faq_store)
 classifier=IntentClassifier(confidence_threshold=.6,use_llm_fallback=False)
 navigation_client=ReusableOpenAIClient(os.getenv('OPENAI_API_KEY',''),timeout=10)
@@ -37,8 +47,34 @@ capacity=threading.BoundedSemaphore(1)
 wake_capacity=threading.BoundedSemaphore(1)
 cache=OrderedDict()
 index_revision=INDEX.stat().st_mtime_ns if INDEX.exists() else 0
+catalog_revision=None
+catalog_answers={}
+log=logging.getLogger('mar_voice')
+
+
+async def refresh_knowledge():
+    global store, catalog_revision, catalog_answers
+    while True:
+        try:
+            snapshot=await asyncio.to_thread(published.index,store.embeddings,catalog_revision)
+        except Exception as error:
+            log.warning('PUBLISHED_KNOWLEDGE_REFRESH_FAILED code=%s',type(error).__name__)
+            # A failed refresh cannot certify that the previous articles are still published.
+            snapshot=(None,HospitalVectorStore(store.embeddings),{})
+        if snapshot is not None:
+            while not capacity.acquire(blocking=False):
+                await asyncio.sleep(.05)
+            try:
+                catalog_revision,store,catalog_answers=snapshot
+                rag.vector_store=store
+            finally:
+                capacity.release()
+        await asyncio.sleep(published.refresh_sec)
+
+
 @asynccontextmanager
 async def lifespan(_app):
+    refresh=None
     try:
         if os.getenv('AI_PRELOAD_CLIENTS','true').lower()=='true':
             rag.preload_client()
@@ -47,8 +83,12 @@ async def lifespan(_app):
             from starlette.concurrency import run_in_threadpool
             from .wake import preload
             await run_in_threadpool(preload)
+        if published:refresh=asyncio.create_task(refresh_knowledge())
         yield
     finally:
+        if refresh:
+            refresh.cancel()
+            await asyncio.gather(refresh,return_exceptions=True)
         rag.close()
         navigation_client.close()
 
@@ -62,6 +102,7 @@ class Question(BaseModel):
     turn_id:UUID
     text:str=Field(min_length=1,max_length=2000)
     language:Literal['vi','en']='vi'
+    hospital_information_id:UUID|None=None
     history:list[Message]=Field(default_factory=list,max_length=8)
     destinations:list[dict]=Field(default_factory=list,max_length=100)
 
@@ -85,6 +126,7 @@ def navigation_action(q,intent):
         matched=[p for p in candidates if any(normalized(p.get(k,''))==normalized(label) for k in ('endpointCode','endpointName','roomCode','roomName'))]
         if len(matched)==1:
             p=matched[0];return True,dict(kind='NAVIGATE',endpoint_id=p['endpointId'],destination_label=p.get('endpointName') or p['endpointCode'])
+        if len(matched)>1:return True,None
     if not candidates:return True,None
     try:
         response=navigation_client.get().chat.completions.create(
@@ -116,13 +158,18 @@ def authorize(value):
 @app.get('/health')
 def health():
     from .wake import status as wake_status
-    try:faq_active=faq_store.snapshot()['active'];faq_available=True
+    try:
+        faq_active=faq_store.snapshot()['active'] if faq_store else len(catalog_answers)
+        faq_available=published is None or catalog_revision is not None
     except FAQDataError:faq_active=0;faq_available=False
-    ready=bool(os.getenv('AI_ROBOT_API_TOKEN') and (faq_active or (store.points and os.getenv('OPENAI_API_KEY'))))
-    return dict(state='READY' if ready and faq_available else 'NOT_CONFIGURED',faq_active=faq_active,faq_available=faq_available,
+    local_ready=faq_available and (faq_active or (store.points and os.getenv('OPENAI_API_KEY')))
+    ready=bool(os.getenv('AI_ROBOT_API_TOKEN') and (published or local_ready))
+    return dict(state='READY' if ready else 'NOT_CONFIGURED',faq_active=faq_active,faq_available=faq_available,
         answer_mode='FAQ_AND_RAG' if os.getenv('OPENAI_API_KEY') else 'FAQ_ONLY',
         model=model,intent_model=intent_model,provider='openai',embedding=type(store.embeddings).__name__,vector_count=len(store.points),wake=wake_status(),
-        model_client_initialized=rag._openai.initialized,navigation_client_initialized=navigation_client.initialized)
+        model_client_initialized=rag._openai.initialized,navigation_client_initialized=navigation_client.initialized,
+        knowledge_source='PUBLISHED_HOSPITAL_ARTICLES' if published else 'LOCAL_FILES',
+        hospital_id=published.hospital_id if published else None,knowledge_revision=catalog_revision)
 
 
 @app.post('/api/robot/wake')
@@ -165,27 +212,38 @@ def chat(q:Question,response:Response,authorization:str|None=Header(default=None
         old=cache.get(identity)
         if old and now-old[0]<600:
             if old[1]!=fingerprint:raise HTTPException(409,'TURN_ID_REUSED_WITH_DIFFERENT_INPUT')
-            response.headers['X-AI-Cache']='turn_replay'
-            response.headers['Server-Timing']='ai_total;dur='+str(timing.finish()['total_ms'])
-            return old[2]
+            if not published or old[3]==catalog_revision:
+                response.headers['X-AI-Cache']='turn_replay'
+                response.headers['Server-Timing']='ai_total;dur='+str(timing.finish()['total_ms'])
+                return old[2]
         with timing.measure('classify_ms'):
             intent=classifier.classify(q.text)
             if normalized(q.text) in ('hello mar','xin chao','chao mar','hello','hi mar'):
                 intent.intent='GREETING';intent.confidence=.99
+        if published:
+            knowledge_allowed=(str(q.hospital_information_id)==published.hospital_id and catalog_revision is not None
+                               and bool(catalog_answers or store.points))
+        else:
+            knowledge_allowed=q.hospital_information_id is None or q.hospital_information_id==demo_hospital_id
         with timing.measure('faq_lookup_ms'):
-            try:faq=rag.lookup_faq(q.text) if faq_allowed(q.text,intent.intent) else None
-            except FAQDataError:raise HTTPException(503,'FAQ_DATA_UNAVAILABLE') from None
-        with timing.measure('index_refresh_ms'):
-            revision=INDEX.stat().st_mtime_ns if INDEX.exists() else 0
-            if not faq and revision!=index_revision:
-                try:store.load(INDEX)
-                except (OSError,ValueError):raise HTTPException(503,'AI_INDEX_UPDATING') from None
-                index_revision=revision
+            faq=None
+            if knowledge_allowed and faq_allowed(q.text,intent.intent):
+                try:
+                    faq=(catalog_answers.get((q.language,question_key(q.text))) if published
+                         else rag.lookup_faq(q.text))
+                except FAQDataError:raise HTTPException(503,'FAQ_DATA_UNAVAILABLE') from None
+        if knowledge_allowed and not published and not faq:
+            with timing.measure('index_refresh_ms'):
+                revision=INDEX.stat().st_mtime_ns if INDEX.exists() else 0
+                if revision!=index_revision:
+                    try:store.load(INDEX)
+                    except (OSError,ValueError):raise HTTPException(503,'AI_INDEX_UPDATING') from None
+                    index_revision=revision
         action=None;end=False;sources=[];response_model=None;answer_mode='scripted'
         with timing.measure('navigation_ms'):
             navigating,proposed=navigation_action(q,intent) if not faq and intent.intent not in ('GREETING','FAREWELL','EMERGENCY_SOS') else (False,None)
         if faq:
-            answer=faq['answer'];answer_mode='approved_faq'
+            answer=faq['answer'];answer_mode=faq.get('answer_mode','approved_faq')
             intent.intent='QUERY_HOSPITAL_INFO';intent.confidence=1.
             sources=faq['sources']
         elif navigating:
@@ -195,11 +253,15 @@ def chat(q:Question,response:Response,authorization:str|None=Header(default=None
             answer='Bạn vui lòng mở phiên map rồi nói rõ tên điểm đã lưu.' if not q.destinations else 'Tôi chưa xác định rõ một điểm đến. Bạn vui lòng nói lại tên điểm trên map.'
             if action:answer='Tôi sẽ đối chiếu điểm đến với bản đồ đang mở. Bạn vui lòng xác nhận sau khi tôi đọc lại tên điểm.'
         elif intent.intent=='GREETING':answer='Xin chào, bạn cần MAR giúp gì không?'
-        elif intent.intent=='SELF_INTRO':answer='Tôi là MAR, robot hỗ trợ tra cứu thông tin và dẫn đường trong bệnh viện. Bạn cần tôi giúp gì?'
+        elif intent.intent=='SELF_INTRO':answer='Tôi là MAR, robot hỗ trợ tra cứu thông tin và dẫn đường. Bạn cần tôi giúp gì không?'
         elif intent.intent=='FAREWELL':answer='Phiên trò chuyện đã kết thúc. Khi cần hỗ trợ, hãy gọi MAR.';end=True
         elif intent.intent=='EMERGENCY_SOS':answer='Bạn hãy gọi ngay nhân viên y tế gần nhất để được hỗ trợ.'
+        elif not knowledge_allowed:
+            answer='Tôi chưa có thông tin được cơ sở này xác nhận. Bạn vui lòng hỏi quầy tiếp đón.'
+            answer_mode='facility_knowledge_unavailable';intent.confidence=0.
         elif not os.getenv('OPENAI_API_KEY'):
-            if not faq_store.snapshot()['active']:raise HTTPException(503,'AI_MODEL_NOT_CONFIGURED')
+            active=len(catalog_answers) if published else faq_store.snapshot()['active']
+            if not active:raise HTTPException(503,'AI_MODEL_NOT_CONFIGURED')
             answer='Tôi chưa có câu trả lời đã được xác nhận cho câu hỏi này. Bạn vui lòng hỏi nhân viên bệnh viện.'
             answer_mode='faq_only_no_match';intent.confidence=0.
         else:
@@ -213,14 +275,20 @@ def chat(q:Question,response:Response,authorization:str|None=Header(default=None
             response_model=model if answer_mode in ('generated','answer_cache') else None
             for key,value in result.get('timings_ms',{}).items():timing.values['rag_'+key]=value
             sources=[dict(source=s.get('source'),score=s.get('score')) for s in result['sources']]
+            for source,match in zip(sources,result['sources']):
+                article_id=match.get('metadata',{}).get('article_id')
+                if article_id:source['article_id']=article_id
         timings=timing.finish()
         response.headers['X-AI-Cache']='answer_cache' if answer_mode=='answer_cache' else 'miss'
         response.headers['Server-Timing']='ai_total;dur='+str(timings['total_ms'])
-        payload=dict(session_id=str(q.session_id),turn_id=str(q.turn_id),answer=answer,speech_text=answer[:500],intent=intent.intent,
+        speech_text=answer
+        if not published and sources and answer!='Tôi không trả lời thông tin này được.':
+            speech_text='Theo tài liệu mô phỏng, '+answer
+        payload=dict(session_id=str(q.session_id),turn_id=str(q.turn_id),answer=answer,speech_text=speech_text[:500],intent=intent.intent,
             confidence=intent.confidence,sources=sources,action=action,end_session=end,model=response_model,
             processing_ms=round(timings['total_ms']),timings_ms=timings,answer_mode=answer_mode,
             metrics_scope='ai_server_only')
-        cache[identity]=(now,fingerprint,payload);cache.move_to_end(identity)
+        cache[identity]=(now,fingerprint,payload,catalog_revision);cache.move_to_end(identity)
         while len(cache)>256:cache.popitem(last=False)
         return payload
     finally:capacity.release()
