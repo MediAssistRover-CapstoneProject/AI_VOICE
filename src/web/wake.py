@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import logging
 from pathlib import Path
 import re
 import threading
@@ -21,11 +22,23 @@ MODEL_FILES = {
 _recognizer = None
 _model_path = None
 _lock = threading.Lock()
+_statistics_lock = threading.Lock()
+_counts = {'processed': 0, 'detected': 0, 'low_energy': 0, 'no_match': 0}
+_last_decision = None
 
 
 def normalize(text: str) -> str:
     text = unicodedata.normalize('NFC', text).casefold()
     return ' '.join(re.sub(r'[^\w\s]', ' ', text).split())
+
+
+def matching_key(text: str) -> str:
+    """Optional tone tolerance for ASR's letter names; still match a whole phrase."""
+    value = normalize(text)
+    if os.getenv('AI_WAKE_IGNORE_TONE', 'false').lower() == 'true':
+        value = ''.join(char for char in unicodedata.normalize('NFD', value)
+                        if unicodedata.category(char) != 'Mn').replace('đ', 'd')
+    return value
 
 
 def settings() -> tuple[bool, str, tuple[str, ...], Path]:
@@ -34,7 +47,7 @@ def settings() -> tuple[bool, str, tuple[str, ...], Path]:
     aliases = tuple(part.strip() for part in os.getenv('AI_WAKE_ALIASES', '').split(',') if part.strip())
     return (
         os.getenv('AI_WAKE_ENABLED', 'false').lower() == 'true',
-        os.getenv('AI_WAKE_PHRASE', 'Chào cậu').strip(),
+        os.getenv('AI_WAKE_PHRASE', 'M A').strip(),
         aliases,
         Path(os.getenv('AI_WAKE_MODEL_PATH') or default),
     )
@@ -46,9 +59,29 @@ def model_exists(path: Path) -> bool:
 
 def status() -> dict:
     enabled, phrase, aliases, model_path = settings()
+    with _statistics_lock:
+        counts = dict(_counts)
+        decision = dict(_last_decision) if _last_decision is not None else None
     return dict(enabled=enabled, phrase=phrase, aliases=list(aliases), engine=ENGINE,
                 configured=bool(normalize(phrase)) and model_exists(model_path),
-                loaded=_recognizer is not None and _model_path == model_path)
+                loaded=_recognizer is not None and _model_path == model_path,
+                statistics=counts, last_decision=decision)
+
+
+def _record_decision(result: dict, reason: str) -> dict:
+    """Only acoustic metrics and decisions; never retain audio or decoded text."""
+    global _last_decision
+    result['reason'] = reason
+    with _statistics_lock:
+        _counts['processed'] += 1
+        _counts[{'MATCH': 'detected', 'LOW_AUDIO_ENERGY': 'low_energy',
+                 'NO_PHRASE_MATCH': 'no_match'}[reason]] += 1
+        _last_decision = {key: result[key] for key in
+                          ('detected', 'reason', 'audio_ms', 'rms', 'processing_ms')}
+    logging.getLogger('uvicorn.error').info(
+        'WAKE_DECISION detected=%s reason=%s audio_ms=%d rms=%.5f processing_ms=%d',
+        result['detected'], reason, result['audio_ms'], result['rms'], result['processing_ms'])
+    return result
 
 
 def _load_recognizer(model_path):
@@ -85,14 +118,16 @@ def detect(pcm: bytes) -> dict:
     if not 6400 <= len(pcm) <= MAX_PCM_BYTES or len(pcm) % 2:
         raise ValueError('WAKE_REQUIRES_PCM16_MONO_16KHZ_0P2_TO_4_SECONDS')
     phrases = (phrase, *aliases)
-    expected = {normalize(value) for value in phrases}
+    expected = {matching_key(value) for value in phrases}
     if '' in expected or any(len(value) > 80 for value in phrases):
         raise RuntimeError('VOICE_WAKE_CONFIG_INVALID')
 
-    result = dict(detected=False, phrase=phrase, engine=ENGINE, processing_ms=0)
     samples = np.frombuffer(pcm, dtype='<i2').astype(np.float32) / 32768.0
-    if np.mean(samples * samples) < .003 ** 2:
-        return result
+    energy = float(np.mean(samples * samples))
+    result = dict(detected=False, phrase=phrase, engine=ENGINE, processing_ms=0,
+                  audio_ms=round(len(samples) * 1000 / SAMPLE_RATE), rms=round(energy ** .5, 5))
+    if energy < .003 ** 2:
+        return _record_decision(result, 'LOW_AUDIO_ENERGY')
 
     started = time.monotonic()
     with _lock:
@@ -100,6 +135,6 @@ def detect(pcm: bytes) -> dict:
         stream = recognizer.create_stream()
         stream.accept_waveform(SAMPLE_RATE, samples)
         recognizer.decode_stream(stream)
-        result['detected'] = normalize(stream.result.text) in expected
+        result['detected'] = matching_key(stream.result.text) in expected
     result['processing_ms'] = round((time.monotonic() - started) * 1000)
-    return result
+    return _record_decision(result, 'MATCH' if result['detected'] else 'NO_PHRASE_MATCH')

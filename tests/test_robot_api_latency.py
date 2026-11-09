@@ -101,6 +101,18 @@ def test_wake_preload_loads_once_and_does_not_decode(tmp_path, monkeypatch):
         recognizer.decode_stream.assert_called_once()
 
 
+def test_letter_wake_tolerates_tone_only_when_enabled_and_never_matches_a_prefix(monkeypatch):
+    from src.web import wake
+    monkeypatch.setenv('AI_WAKE_IGNORE_TONE', 'true')
+    expected = {wake.matching_key(value) for value in ('M A', 'em a', 'mờ a')}
+    for text in ('M A', 'EM À', 'mờ a'):
+        assert wake.matching_key(text) in expected
+    for text in ('AN A', 'điểm A', 'em a dẫn tôi đi', ''):
+        assert wake.matching_key(text) not in expected
+    monkeypatch.setenv('AI_WAKE_IGNORE_TONE', 'false')
+    assert wake.matching_key('EM À') != wake.matching_key('em a')
+
+
 def test_rag_generation_reuses_provider_client_between_different_questions():
     with patch('openai.OpenAI') as create:
         create.return_value.chat.completions.create.return_value = NS(choices=[NS(message=NS(content='Trả lời.'))])
