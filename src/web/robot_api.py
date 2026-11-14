@@ -3,12 +3,14 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import hmac
+import io
 import json
 import logging
 import os
 from pathlib import Path
 import threading
 import time
+import wave
 from collections import OrderedDict
 from contextlib import asynccontextmanager
 from typing import Literal
@@ -16,6 +18,7 @@ from uuid import UUID
 from dotenv import load_dotenv
 from fastapi import FastAPI, Header, HTTPException, Request, Response
 from pydantic import BaseModel, Field
+from starlette.concurrency import run_in_threadpool
 
 ROOT=Path(__file__).resolve().parents[2]
 load_dotenv(ROOT/'.env',override=False)
@@ -47,6 +50,10 @@ classifier=IntentClassifier(confidence_threshold=.6,use_llm_fallback=False)
 navigation_client=ReusableOpenAIClient(os.getenv('OPENAI_API_KEY',''),timeout=10)
 capacity=threading.BoundedSemaphore(1)
 wake_capacity=threading.BoundedSemaphore(1)
+speech_capacity=threading.BoundedSemaphore(1)
+speech_client=ReusableOpenAIClient(os.getenv('OPENAI_API_KEY',''),timeout=8)
+MAX_CAPTURE_BYTES=640_044
+MAX_SPEECH_BYTES=4*1024*1024
 cache=OrderedDict()
 index_revision=INDEX.stat().st_mtime_ns if INDEX.exists() else 0
 catalog_revision=None
@@ -81,6 +88,7 @@ async def lifespan(_app):
         if os.getenv('AI_PRELOAD_CLIENTS','true').lower()=='true':
             rag.preload_client()
             if navigation_client.api_key:navigation_client.get()
+            if direct_speech_enabled():speech_client.get()
         if os.getenv('AI_WAKE_PRELOAD','false').lower()=='true':
             from starlette.concurrency import run_in_threadpool
             from .wake import preload
@@ -93,6 +101,7 @@ async def lifespan(_app):
             await asyncio.gather(refresh,return_exceptions=True)
         rag.close()
         navigation_client.close()
+        speech_client.close()
 
 app=FastAPI(title='MAR Robot RAG',version='1.1',docs_url=None,redoc_url=None,lifespan=lifespan)
 
@@ -107,6 +116,11 @@ class Question(BaseModel):
     hospital_information_id:UUID|None=None
     history:list[Message]=Field(default_factory=list,max_length=8)
     destinations:list[dict]=Field(default_factory=list,max_length=100)
+
+
+class SpeechText(BaseModel):
+    text:str=Field(min_length=1,max_length=500)
+    language:Literal['vi','en']='vi'
 
 def normalized(text):
     return ' '.join(''.join(c for c in unicodedata.normalize('NFD',text.casefold().replace('đ','d'))
@@ -157,6 +171,101 @@ def authorize(value):
     if not token:raise HTTPException(503,'AI_ROBOT_TOKEN_NOT_CONFIGURED')
     if not value or not hmac.compare_digest(value,'Bearer '+token):raise HTTPException(401,'AI_ROBOT_AUTH_FAILED')
 
+
+def direct_speech_enabled():
+    return bool(speech_client.api_key and os.getenv('AI_DIRECT_SPEECH_ENABLED','false').lower()=='true')
+
+
+async def read_speech_body(request, media_type, limit):
+    if request.headers.get('content-type','').split(';',1)[0].strip().lower()!=media_type:
+        raise HTTPException(415,'DIRECT_SPEECH_CONTENT_TYPE')
+    raw=bytearray()
+    async for block in request.stream():
+        if len(raw)+len(block)>limit:raise HTTPException(413,'DIRECT_SPEECH_REQUEST_TOO_LARGE')
+        raw.extend(block)
+    return bytes(raw)
+
+
+def transcribe_wav(raw,language):
+    try:
+        with wave.open(io.BytesIO(raw),'rb') as audio:
+            n=audio.getnframes()
+            if (audio.getnchannels()!=1 or audio.getsampwidth()!=2 or audio.getframerate()!=16_000
+                    or audio.getcomptype()!='NONE' or not 3200<=n<=320_000):
+                raise ValueError()
+            pcm=audio.readframes(n)
+            if len(pcm)!=n*2:raise ValueError()
+    except (EOFError,ValueError,wave.Error):
+        raise HTTPException(422,'DIRECT_SPEECH_INVALID_WAV') from None
+    if not any(pcm):return {'text':''}
+    model_name=os.getenv('AI_STT_MODEL','gpt-transcribe')
+    args={}
+    if model_name=='gpt-transcribe':
+        args['extra_body']={'languages':['vi','en'] if language=='auto' else [language]}
+    elif language!='auto':args['language']=language
+    try:
+        reply=speech_client.get().audio.transcriptions.create(
+            file=('capture.wav',raw,'audio/wav'),model=model_name,response_format='json',
+            prompt='Transcribe only audible Vietnamese or English speech. Preserve room names and destination labels.',**args)
+        if model_name=='gpt-transcribe' and getattr(reply,'languages',None)==[]:return {'text':''}
+        text=reply.text.strip()
+        if len(text)>4000:raise ValueError()
+    except Exception as error:
+        log.warning('DIRECT_STT_PROVIDER_ERROR code=%s',type(error).__name__)
+        raise HTTPException(502,'DIRECT_STT_PROVIDER_ERROR') from None
+    return {'text':text}
+
+
+def synthesize_wav(body):
+    try:
+        speed=float(os.getenv('AI_TTS_SPEED','1.2'))
+        if not .25<=speed<=4.:raise ValueError()
+        instructions=('Speak fluent Vietnamese with a natural conversational rhythm. '
+                      if body.language=='vi' else 'Speak fluent English with a natural conversational rhythm. ')
+        instructions+='Keep pauses brief, use connected phrases, and read exactly the text.'
+        with speech_client.get().audio.speech.with_streaming_response.create(
+                model=os.getenv('AI_TTS_MODEL','gpt-4o-mini-tts'),voice=os.getenv('AI_TTS_VOICE','nova'),
+                input=body.text,speed=speed,response_format='wav',instructions=instructions) as reply:
+            audio=bytearray()
+            for chunk in reply.iter_bytes():
+                if len(audio)+len(chunk)>MAX_SPEECH_BYTES:raise ValueError()
+                audio.extend(chunk)
+        if len(audio)<=44 or audio[:4]!=b'RIFF' or audio[8:12]!=b'WAVE':raise ValueError()
+    except Exception as error:
+        log.warning('DIRECT_TTS_PROVIDER_ERROR code=%s',type(error).__name__)
+        raise HTTPException(502,'DIRECT_TTS_PROVIDER_ERROR') from None
+    return Response(bytes(audio),media_type='audio/wav',headers={'Cache-Control':'no-store'})
+
+
+@app.post('/api/robot/speech/transcribe')
+async def transcribe(request:Request, language:Literal['vi','en','auto']='auto', authorization:str|None=Header(default=None)):
+    authorize(authorization)
+    if not direct_speech_enabled():raise HTTPException(503,'DIRECT_SPEECH_DISABLED')
+    if not speech_capacity.acquire(blocking=False):raise HTTPException(429,'DIRECT_SPEECH_BUSY')
+    try:
+        raw=await read_speech_body(request,'audio/wav',MAX_CAPTURE_BYTES)
+        value=await run_in_threadpool(transcribe_wav,raw,language)
+        return Response(json.dumps(value,ensure_ascii=False),media_type='application/json',headers={'Cache-Control':'no-store'})
+    finally:
+        speech_capacity.release()
+
+
+@app.post('/api/robot/speech/synthesize')
+async def synthesize(request:Request, authorization:str|None=Header(default=None)):
+    authorize(authorization)
+    if not direct_speech_enabled():raise HTTPException(503,'DIRECT_SPEECH_DISABLED')
+    if not speech_capacity.acquire(blocking=False):raise HTTPException(429,'DIRECT_SPEECH_BUSY')
+    try:
+        raw=await read_speech_body(request,'application/json',8192)
+        try:
+            body=SpeechText.model_validate_json(raw)
+            if not body.text.strip():raise ValueError()
+        except ValueError:
+            raise HTTPException(422,'DIRECT_SPEECH_INVALID_TEXT') from None
+        return await run_in_threadpool(synthesize_wav,body)
+    finally:
+        speech_capacity.release()
+
 @app.get('/health')
 def health():
     from .wake import status as wake_status
@@ -168,6 +277,7 @@ def health():
     knowledge_ready=bool(os.getenv('OPENAI_API_KEY')) if vector_store_id else bool(published or local_ready)
     ready=bool(os.getenv('AI_ROBOT_API_TOKEN') and knowledge_ready)
     return dict(state='READY' if ready else 'NOT_CONFIGURED',faq_active=faq_active,faq_available=faq_available,
+        direct_speech=direct_speech_enabled(),
         answer_mode='VECTOR_STORE' if vector_store_id else 'FAQ_AND_RAG' if os.getenv('OPENAI_API_KEY') else 'FAQ_ONLY',
         model=model,intent_model=intent_model,provider='openai',embedding=type(store.embeddings).__name__,vector_count=len(store.points),wake=wake_status(),
         model_client_initialized=rag._openai.initialized,navigation_client_initialized=navigation_client.initialized,
