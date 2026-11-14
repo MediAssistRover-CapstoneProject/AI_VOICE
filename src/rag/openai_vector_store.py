@@ -1,5 +1,6 @@
 """Bounded retrieval from the deployment's single OpenAI knowledge store."""
 import re
+from typing import Any
 
 
 class OpenAIVectorStore:
@@ -14,7 +15,7 @@ class OpenAIVectorStore:
             # The SDK's generic HTTP method also works with existing 1.x installs.
             result = self.client.get().with_options(timeout=5).post(
                 '/vector_stores/' + self.vector_store_id + '/search',
-                cast_to=dict,
+                cast_to=dict[str, Any],
                 options={'headers': {'OpenAI-Beta': 'assistants=v2'}},
                 body={'query': question, 'max_num_results': 5,
                       'ranking_options': {'ranker': 'auto', 'score_threshold': 0.2}},

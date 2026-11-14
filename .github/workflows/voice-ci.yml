@@ -25,7 +25,7 @@ jobs:
       - name: Test robot voice and deployment scripts
         run: |
           python -m pip install -r deploy/ec2/requirements.txt 'pytest>=8,<10' 'python-multipart>=0.0.18,<1'
-          python -m pytest -q tests/test_robot_api_latency.py tests/test_faq.py
+          python -m pytest -q tests/test_robot_api_latency.py tests/test_faq.py tests/test_openai_knowledge.py
           bash -n deploy/ec2/install.sh
           bash -n deploy/ec2/media-edge.sh
 

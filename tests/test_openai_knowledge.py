@@ -13,6 +13,17 @@ STORE = 'vs_6af8249d9d44819182d2ad94213eacfa'
 HEADERS = {'Authorization': 'Bearer knowledge-test-token'}
 
 
+def test_real_sdk_decodes_vector_search_json():
+    import httpx
+    from openai import OpenAI
+    from src.rag.openai_vector_store import OpenAIVectorStore
+
+    transport = httpx.MockTransport(lambda request: httpx.Response(200, json={'data': []}))
+    with OpenAI(api_key='mock-key', http_client=httpx.Client(transport=transport)) as sdk:
+        store = OpenAIVectorStore(STORE, NS(get=lambda: sdk))
+        assert store.search('MAR LANTERN') == ('', [])
+
+
 @pytest.fixture
 def pipeline():
     store = HospitalVectorStore(LocalOfflineEmbeddings(dimensions=384))
