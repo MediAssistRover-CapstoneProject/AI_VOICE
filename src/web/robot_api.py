@@ -30,17 +30,19 @@ import unicodedata
 
 DATA_DIR=Path(os.getenv('AI_DATA_DIR') or ROOT/'data')
 INDEX=DATA_DIR/'hospital_vector_store.json'
+vector_store_id=os.getenv('OPENAI_VECTOR_STORE_ID','').strip()
 hospital_id=os.getenv('AI_HOSPITAL_ID','').strip()
 demo_id=os.getenv('AI_DEMO_HOSPITAL_ID','').strip()
 demo_hospital_id=UUID(demo_id) if demo_id else None
 published=(PublishedKnowledge(os.getenv('BACKEND_URL',''),hospital_id,int(os.getenv('AI_KNOWLEDGE_REFRESH_SEC','30')))
-           if hospital_id else None)
-store=HospitalVectorStore(create_embeddings(os.getenv('EMBEDDING_PROVIDER','local'),
-                          openai_api_key=os.getenv('OPENAI_API_KEY','')),None if published else INDEX)
+           if hospital_id and not vector_store_id else None)
+store=HospitalVectorStore(create_embeddings('local' if vector_store_id else os.getenv('EMBEDDING_PROVIDER','local'),
+                          openai_api_key=os.getenv('OPENAI_API_KEY','')),None if published or vector_store_id else INDEX)
 model=os.getenv('AI_RESPONSE_MODEL','gpt-6-astra')
 intent_model=os.getenv('AI_INTENT_MODEL','gpt-6-luna')
-faq_store=None if published else FAQStore(DATA_DIR/'faqs.json')
-rag=HospitalRAGPipeline(store,llm_provider='openai',openai_api_key=os.getenv('OPENAI_API_KEY',''),llm_model=model,require_model=True,faq_store=faq_store)
+faq_store=None if published or vector_store_id else FAQStore(DATA_DIR/'faqs.json')
+rag=HospitalRAGPipeline(store,llm_provider='openai',openai_api_key=os.getenv('OPENAI_API_KEY',''),llm_model=model,
+                       require_model=True,faq_store=faq_store,openai_vector_store_id=vector_store_id)
 classifier=IntentClassifier(confidence_threshold=.6,use_llm_fallback=False)
 navigation_client=ReusableOpenAIClient(os.getenv('OPENAI_API_KEY',''),timeout=10)
 capacity=threading.BoundedSemaphore(1)
@@ -163,12 +165,13 @@ def health():
         faq_available=published is None or catalog_revision is not None
     except FAQDataError:faq_active=0;faq_available=False
     local_ready=faq_available and (faq_active or (store.points and os.getenv('OPENAI_API_KEY')))
-    ready=bool(os.getenv('AI_ROBOT_API_TOKEN') and (published or local_ready))
+    knowledge_ready=bool(os.getenv('OPENAI_API_KEY')) if vector_store_id else bool(published or local_ready)
+    ready=bool(os.getenv('AI_ROBOT_API_TOKEN') and knowledge_ready)
     return dict(state='READY' if ready else 'NOT_CONFIGURED',faq_active=faq_active,faq_available=faq_available,
-        answer_mode='FAQ_AND_RAG' if os.getenv('OPENAI_API_KEY') else 'FAQ_ONLY',
+        answer_mode='VECTOR_STORE' if vector_store_id else 'FAQ_AND_RAG' if os.getenv('OPENAI_API_KEY') else 'FAQ_ONLY',
         model=model,intent_model=intent_model,provider='openai',embedding=type(store.embeddings).__name__,vector_count=len(store.points),wake=wake_status(),
         model_client_initialized=rag._openai.initialized,navigation_client_initialized=navigation_client.initialized,
-        knowledge_source='PUBLISHED_HOSPITAL_ARTICLES' if published else 'LOCAL_FILES',
+        knowledge_source='OPENAI_VECTOR_STORE' if vector_store_id else 'PUBLISHED_HOSPITAL_ARTICLES' if published else 'LOCAL_FILES',
         hospital_id=published.hospital_id if published else None,knowledge_revision=catalog_revision)
 
 
@@ -220,19 +223,21 @@ def chat(q:Question,response:Response,authorization:str|None=Header(default=None
             intent=classifier.classify(q.text)
             if normalized(q.text) in ('hello mar','xin chao','chao mar','hello','hi mar'):
                 intent.intent='GREETING';intent.confidence=.99
-        if published:
+        if vector_store_id:
+            knowledge_allowed=True
+        elif published:
             knowledge_allowed=(str(q.hospital_information_id)==published.hospital_id and catalog_revision is not None
                                and bool(catalog_answers or store.points))
         else:
             knowledge_allowed=q.hospital_information_id is None or q.hospital_information_id==demo_hospital_id
         with timing.measure('faq_lookup_ms'):
             faq=None
-            if knowledge_allowed and faq_allowed(q.text,intent.intent):
+            if knowledge_allowed and not vector_store_id and faq_allowed(q.text,intent.intent):
                 try:
                     faq=(catalog_answers.get((q.language,question_key(q.text))) if published
                          else rag.lookup_faq(q.text))
                 except FAQDataError:raise HTTPException(503,'FAQ_DATA_UNAVAILABLE') from None
-        if knowledge_allowed and not published and not faq:
+        if knowledge_allowed and not vector_store_id and not published and not faq:
             with timing.measure('index_refresh_ms'):
                 revision=INDEX.stat().st_mtime_ns if INDEX.exists() else 0
                 if revision!=index_revision:
@@ -260,6 +265,7 @@ def chat(q:Question,response:Response,authorization:str|None=Header(default=None
             answer='Tôi chưa có thông tin được cơ sở này xác nhận. Bạn vui lòng hỏi quầy tiếp đón.'
             answer_mode='facility_knowledge_unavailable';intent.confidence=0.
         elif not os.getenv('OPENAI_API_KEY'):
+            if vector_store_id:raise HTTPException(503,'AI_MODEL_NOT_CONFIGURED')
             active=len(catalog_answers) if published else faq_store.snapshot()['active']
             if not active:raise HTTPException(503,'AI_MODEL_NOT_CONFIGURED')
             answer='Tôi chưa có câu trả lời đã được xác nhận cho câu hỏi này. Bạn vui lòng hỏi nhân viên bệnh viện.'
@@ -270,19 +276,23 @@ def chat(q:Question,response:Response,authorization:str|None=Header(default=None
                     result=rag.answer_question(q.text,history=[h.model_dump() for h in q.history])
             except FAQDataError:raise HTTPException(503,'FAQ_DATA_UNAVAILABLE') from None
             except RuntimeError as error:
-                raise HTTPException(503,'AI_MODEL_NOT_CONFIGURED' if str(error)=='AI_MODEL_NOT_CONFIGURED' else 'AI_MODEL_UNAVAILABLE') from None
+                code=str(error)
+                if code not in ('AI_MODEL_NOT_CONFIGURED','AI_KNOWLEDGE_UNAVAILABLE'):
+                    code='AI_MODEL_UNAVAILABLE'
+                raise HTTPException(503,code) from None
             answer=result['answer'];answer_mode=result.get('answer_mode','generated')
-            response_model=model if answer_mode in ('generated','answer_cache') else None
+            response_model=model if answer_mode in ('generated','answer_cache','vector_store') else None
             for key,value in result.get('timings_ms',{}).items():timing.values['rag_'+key]=value
             sources=[dict(source=s.get('source'),score=s.get('score')) for s in result['sources']]
             for source,match in zip(sources,result['sources']):
+                if match.get('file_id'):source['file_id']=match['file_id']
                 article_id=match.get('metadata',{}).get('article_id')
                 if article_id:source['article_id']=article_id
         timings=timing.finish()
         response.headers['X-AI-Cache']='answer_cache' if answer_mode=='answer_cache' else 'miss'
         response.headers['Server-Timing']='ai_total;dur='+str(timings['total_ms'])
         speech_text=answer
-        if not published and sources and answer!='Tôi không trả lời thông tin này được.':
+        if not vector_store_id and not published and sources and answer!='Tôi không trả lời thông tin này được.':
             speech_text='Theo tài liệu mô phỏng, '+answer
         payload=dict(session_id=str(q.session_id),turn_id=str(q.turn_id),answer=answer,speech_text=speech_text[:500],intent=intent.intent,
             confidence=intent.confidence,sources=sources,action=action,end_session=end,model=response_model,

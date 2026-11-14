@@ -18,6 +18,7 @@ from collections import OrderedDict
 from typing import Any
 
 from src.rag.vector_store import HospitalVectorStore, SearchResult
+from src.rag.openai_vector_store import OpenAIVectorStore
 
 log = logging.getLogger("mar_voice")
 
@@ -49,6 +50,7 @@ class HospitalRAGPipeline:
         score_threshold: float = 0.15,
         require_model: bool = False,
         faq_store: FAQStore | None = None,
+        openai_vector_store_id: str = "",
     ) -> None:
         self.vector_store = vector_store
         self.llm_provider = llm_provider.lower()
@@ -59,6 +61,7 @@ class HospitalRAGPipeline:
         self.llm_model = llm_model
         self._local_llm = None
         self._openai = ReusableOpenAIClient(openai_api_key, timeout=20)
+        self.hosted_store = OpenAIVectorStore(openai_vector_store_id, self._openai) if openai_vector_store_id else None
         if self.llm_provider == "ollama":
             from src.local_providers import Ollama
             self._local_llm = Ollama()
@@ -69,6 +72,8 @@ class HospitalRAGPipeline:
 
     def answer_question(self, question: str, history: list[dict] | None = None) -> dict[str, Any]:
         """Execute RAG pipeline: Retrieve relevant context from Vector P and generate answer."""
+        if self.hosted_store:
+            return self._answer_from_hosted_store(question, history)
         timing = StageTimings()
 
         def finish(result, mode):
@@ -152,6 +157,24 @@ class HospitalRAGPipeline:
                 self._answer_cache.popitem(last=False)
         return finish(result, 'generated')
 
+    def _answer_from_hosted_store(self, question, history):
+        if not self.openai_api_key:
+            raise RuntimeError('AI_MODEL_NOT_CONFIGURED')
+        timing = StageTimings()
+        with timing.measure('retrieval_ms'):
+            context, sources = self.hosted_store.search(question)
+        answer = 'Tôi không trả lời thông tin này được.'
+        mode = 'no_context'
+        if context:
+            safe_history = [h for h in (history or [])[-8:]
+                            if h.get('role') in ('user', 'assistant') and isinstance(h.get('content'), str)]
+            with timing.measure('generation_ms'):
+                answer = self._generate_answer(question, context, safe_history, timeout_seconds=18)
+            mode = 'vector_store'
+        return dict(answer=answer, sources=sources, context_used=context,
+                    confidence=max((source['score'] for source in sources), default=0.),
+                    answer_mode=mode, timings_ms=timing.finish())
+
     def close(self):
         self._openai.close()
 
@@ -177,7 +200,8 @@ class HospitalRAGPipeline:
         if self.llm_provider == 'openai' and self.openai_api_key:
             self._openai.get()
 
-    def _generate_answer(self, question: str, context: str, history: list[dict] | None = None) -> str:
+    def _generate_answer(self, question: str, context: str, history: list[dict] | None = None,
+                         timeout_seconds: float | None = None) -> str:
         """Call LLM or offline generator with augmented context."""
         system_content = HOSPITAL_RAG_SYSTEM_PROMPT.format(context=context)
         history_text = "\n".join(h["role"]+": "+h["content"][:1000] for h in (history or []))
@@ -193,6 +217,8 @@ class HospitalRAGPipeline:
         if self.llm_provider == "openai" and self.openai_api_key:
             try:
                 client = self._openai.get()
+                if timeout_seconds is not None:
+                    client = client.with_options(timeout=timeout_seconds)
                 resp = client.chat.completions.create(
                     model=self.llm_model,
                     messages=[
