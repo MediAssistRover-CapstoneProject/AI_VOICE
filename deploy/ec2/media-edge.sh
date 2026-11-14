@@ -66,6 +66,15 @@ location ~ ^/api/robot/(wake|chat)\$ {
     proxy_connect_timeout 3s;
     proxy_read_timeout 30s;
 }
+location ~ ^/api/robot/speech/(transcribe|synthesize)\$ {
+    client_max_body_size 1m;
+    proxy_pass http://$media_ip:7861;
+    proxy_http_version 1.1;
+    proxy_set_header Connection "";
+    proxy_set_header X-Forwarded-Proto https;
+    proxy_connect_timeout 3s;
+    proxy_read_timeout 20s;
+}
 EOF
 install -d -m 0755 "$include_dir"
 changed=true
