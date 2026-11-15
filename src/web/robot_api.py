@@ -8,6 +8,7 @@ import json
 import logging
 import os
 from pathlib import Path
+import re
 import threading
 import time
 import wave
@@ -54,11 +55,18 @@ speech_capacity=threading.BoundedSemaphore(1)
 speech_client=ReusableOpenAIClient(os.getenv('OPENAI_API_KEY',''),timeout=8)
 MAX_CAPTURE_BYTES=640_044
 MAX_SPEECH_BYTES=4*1024*1024
+# One in-memory WAV per public phrase, protected by speech_capacity. Private
+# replies and device input never enter this cache.
+INTRO = 'Xin chào, bạn cần MAR giúp gì không?'
+GOODBYE = 'Phiên trò chuyện đã kết thúc. Khi cần hỗ trợ, hãy gọi MAR.'
+PUBLIC_SPEECH = frozenset({INTRO, GOODBYE})
+public_speech_cache = {}
 cache=OrderedDict()
 index_revision=INDEX.stat().st_mtime_ns if INDEX.exists() else 0
 catalog_revision=None
 catalog_answers={}
 log=logging.getLogger('mar_voice')
+timing_log = logging.getLogger('uvicorn.error')
 
 
 async def refresh_knowledge():
@@ -122,13 +130,29 @@ class SpeechText(BaseModel):
     text:str=Field(min_length=1,max_length=500)
     language:Literal['vi','en']='vi'
 
+
+def spoken_text(text: str, limit: int = 500) -> str:
+    """Flatten display formatting while preserving words, numbers and punctuation."""
+    text = re.sub(r'\[([^\]\n]+)\]\(https?://[^)\s]+\)', r'\1', text)
+    text = re.sub(r'^\s*(?:#{1,6}|>|[-*+]|\d+[.)])\s+', '', text, flags=re.MULTILINE)
+    text = re.sub(r'(`+|\*\*|__|\*)([^\n]+?)\1', r'\2', text)
+    text = ' '.join(text.split())
+    if len(text) <= limit:
+        return text
+    # Keep the original display answer and avoid sending a clipped word to TTS.
+    for match in reversed(list(re.finditer(r'[.!?](?=\s|$)', text[:limit + 1]))):
+        if limit * .7 <= match.end() <= limit:
+            return text[:match.end()]
+    words = text[:limit + 1].rsplit(' ', 1)
+    return words[0] if len(words) > 1 else text[:limit]
+
+
 def normalized(text):
     return ' '.join(''.join(c for c in unicodedata.normalize('NFD',text.casefold().replace('đ','d'))
                             if unicodedata.category(c)!='Mn').strip(' !?.').split())
 
 def navigation_action(q,intent):
     """Resolve language against live candidates; never generate coordinates or a workflow."""
-    import re
     plain=normalized(q.text);label=endpoint_destination(q.text)
     if not label and intent.intent!='ESCORT_REQUEST' and not re.search(r'\b(take|guide|bring|navigate|lead|dan|dua|diem|endpoint|directions|go to|get to)\b',plain):
         return False,None
@@ -217,24 +241,56 @@ def transcribe_wav(raw,language):
 
 
 def synthesize_wav(body):
+    timing = StageTimings()
     try:
         speed=float(os.getenv('AI_TTS_SPEED','1.2'))
         if not .25<=speed<=4.:raise ValueError()
+        model_name = os.getenv('AI_TTS_MODEL', 'gpt-4o-mini-tts')
+        voice = os.getenv('AI_TTS_VOICE', 'nova')
+        cache_key = (model_name, voice, body.language, speed, body.text)
+        cacheable = body.language == 'vi' and body.text in PUBLIC_SPEECH
+        cached = public_speech_cache.get(body.text) if cacheable else None
+        if cached and cached[0] == cache_key:
+            total_ms = timing.finish()['total_ms']
+            timing_log.info('AI_SPEECH_TIMING op=synthesize cache=hit total_ms=%.0f bytes=%d chars=%d speed=%.2f',
+                            total_ms, len(cached[1]), len(body.text), speed)
+            return Response(cached[1], media_type='audio/wav', headers={
+                'Cache-Control': 'no-store', 'X-AI-Cache': 'public_speech',
+                'Server-Timing': f'tts_cache;dur={total_ms:.0f}',
+            })
         instructions=('Speak fluent Vietnamese with a natural conversational rhythm. '
                       if body.language=='vi' else 'Speak fluent English with a natural conversational rhythm. ')
-        instructions+='Keep pauses brief, use connected phrases, and read exactly the text.'
-        with speech_client.get().audio.speech.with_streaming_response.create(
-                model=os.getenv('AI_TTS_MODEL','gpt-4o-mini-tts'),voice=os.getenv('AI_TTS_VOICE','nova'),
-                input=body.text,speed=speed,response_format='wav',instructions=instructions) as reply:
-            audio=bytearray()
-            for chunk in reply.iter_bytes():
-                if len(audio)+len(chunk)>MAX_SPEECH_BYTES:raise ValueError()
-                audio.extend(chunk)
+        instructions += ('Read the text exactly as one connected utterance, with brief pauses only at '
+                         'natural phrase or sentence boundaries. Do not insert pauses between words.')
+        provider_started = time.perf_counter()
+        first_byte_ms = None
+        with timing.measure('provider_ms'):
+            with speech_client.get().audio.speech.with_streaming_response.create(
+                    model=model_name,voice=voice,
+                    input=body.text,speed=speed,response_format='wav',instructions=instructions) as reply:
+                audio=bytearray()
+                for chunk in reply.iter_bytes():
+                    if not chunk:
+                        continue
+                    if first_byte_ms is None:
+                        first_byte_ms = (time.perf_counter() - provider_started) * 1000
+                    if len(audio)+len(chunk)>MAX_SPEECH_BYTES:raise ValueError()
+                    audio.extend(chunk)
         if len(audio)<=44 or audio[:4]!=b'RIFF' or audio[8:12]!=b'WAVE':raise ValueError()
     except Exception as error:
         log.warning('DIRECT_TTS_PROVIDER_ERROR code=%s',type(error).__name__)
         raise HTTPException(502,'DIRECT_TTS_PROVIDER_ERROR') from None
-    return Response(bytes(audio),media_type='audio/wav',headers={'Cache-Control':'no-store'})
+    raw = bytes(audio)
+    if cacheable:
+        public_speech_cache[body.text] = (cache_key, raw)
+    timings = timing.finish()
+    timing_log.info('AI_SPEECH_TIMING op=synthesize first_byte_ms=%.0f provider_ms=%.0f total_ms=%.0f bytes=%d chars=%d speed=%.2f',
+                    first_byte_ms, timings['provider_ms'], timings['total_ms'], len(audio), len(body.text), speed)
+    return Response(raw, media_type='audio/wav', headers={
+        'Cache-Control': 'no-store',
+        'Server-Timing': (f'tts_first_byte;dur={first_byte_ms:.0f}, '
+                          f'tts_provider;dur={timings["provider_ms"]:.0f}, tts_total;dur={timings["total_ms"]:.0f}'),
+    })
 
 
 @app.post('/api/robot/speech/transcribe')
@@ -243,9 +299,17 @@ async def transcribe(request:Request, language:Literal['vi','en','auto']='auto',
     if not direct_speech_enabled():raise HTTPException(503,'DIRECT_SPEECH_DISABLED')
     if not speech_capacity.acquire(blocking=False):raise HTTPException(429,'DIRECT_SPEECH_BUSY')
     try:
+        timing = StageTimings()
         raw=await read_speech_body(request,'audio/wav',MAX_CAPTURE_BYTES)
-        value=await run_in_threadpool(transcribe_wav,raw,language)
-        return Response(json.dumps(value,ensure_ascii=False),media_type='application/json',headers={'Cache-Control':'no-store'})
+        with timing.measure('worker_ms'):
+            value=await run_in_threadpool(transcribe_wav,raw,language)
+        timings = timing.finish()
+        timing_log.info('AI_SPEECH_TIMING op=transcribe worker_ms=%.0f total_ms=%.0f bytes=%d',
+                        timings['worker_ms'], timings['total_ms'], len(raw))
+        return Response(json.dumps(value,ensure_ascii=False), media_type='application/json', headers={
+            'Cache-Control': 'no-store',
+            'Server-Timing': f'stt_worker;dur={timings["worker_ms"]:.0f}, stt_total;dur={timings["total_ms"]:.0f}',
+        })
     finally:
         speech_capacity.release()
 
@@ -259,7 +323,8 @@ async def synthesize(request:Request, authorization:str|None=Header(default=None
         raw=await read_speech_body(request,'application/json',8192)
         try:
             body=SpeechText.model_validate_json(raw)
-            if not body.text.strip():raise ValueError()
+            body.text = spoken_text(body.text)
+            if not body.text:raise ValueError()
         except ValueError:
             raise HTTPException(422,'DIRECT_SPEECH_INVALID_TEXT') from None
         return await run_in_threadpool(synthesize_wav,body)
@@ -367,9 +432,9 @@ def chat(q:Question,response:Response,authorization:str|None=Header(default=None
             action=proposed
             answer='Bạn vui lòng mở phiên map rồi nói rõ tên điểm đã lưu.' if not q.destinations else 'Tôi chưa xác định rõ một điểm đến. Bạn vui lòng nói lại tên điểm trên map.'
             if action:answer='Tôi sẽ đối chiếu điểm đến với bản đồ đang mở. Bạn vui lòng xác nhận sau khi tôi đọc lại tên điểm.'
-        elif intent.intent=='GREETING':answer='Xin chào, bạn cần MAR giúp gì không?'
+        elif intent.intent=='GREETING':answer=INTRO
         elif intent.intent=='SELF_INTRO':answer='Tôi là MAR, robot hỗ trợ tra cứu thông tin và dẫn đường. Bạn cần tôi giúp gì không?'
-        elif intent.intent=='FAREWELL':answer='Phiên trò chuyện đã kết thúc. Khi cần hỗ trợ, hãy gọi MAR.';end=True
+        elif intent.intent=='FAREWELL':answer=GOODBYE;end=True
         elif intent.intent=='EMERGENCY_SOS':answer='Bạn hãy gọi ngay nhân viên y tế gần nhất để được hỗ trợ.'
         elif not knowledge_allowed:
             answer='Tôi chưa có thông tin được cơ sở này xác nhận. Bạn vui lòng hỏi quầy tiếp đón.'
@@ -399,12 +464,16 @@ def chat(q:Question,response:Response,authorization:str|None=Header(default=None
                 article_id=match.get('metadata',{}).get('article_id')
                 if article_id:source['article_id']=article_id
         timings=timing.finish()
+        timing_log.info('AI_CHAT_TIMING mode=%s total_ms=%.0f retrieval_ms=%.0f generation_ms=%.0f navigation_ms=%.0f',
+                        answer_mode, timings['total_ms'], timings.get('rag_retrieval_ms', 0),
+                        timings.get('rag_generation_ms', 0), timings.get('navigation_ms', 0))
         response.headers['X-AI-Cache']='answer_cache' if answer_mode=='answer_cache' else 'miss'
         response.headers['Server-Timing']='ai_total;dur='+str(timings['total_ms'])
         speech_text=answer
         if not vector_store_id and not published and sources and answer!='Tôi không trả lời thông tin này được.':
             speech_text='Theo tài liệu mô phỏng, '+answer
-        payload=dict(session_id=str(q.session_id),turn_id=str(q.turn_id),answer=answer,speech_text=speech_text[:500],intent=intent.intent,
+        payload=dict(session_id=str(q.session_id),turn_id=str(q.turn_id),answer=answer,
+            speech_text=spoken_text(speech_text) or 'Tôi không có nội dung để đọc.',intent=intent.intent,
             confidence=intent.confidence,sources=sources,action=action,end_session=end,model=response_model,
             processing_ms=round(timings['total_ms']),timings_ms=timings,answer_mode=answer_mode,
             metrics_scope='ai_server_only')
