@@ -15,11 +15,12 @@ import wave
 from collections import OrderedDict
 from contextlib import asynccontextmanager
 from typing import Literal
-from uuid import UUID
+from uuid import UUID, uuid4
 from dotenv import load_dotenv
 from fastapi import FastAPI, Header, HTTPException, Request, Response
-from pydantic import BaseModel, Field
+from pydantic import AliasChoices, BaseModel, Field
 from starlette.concurrency import run_in_threadpool
+from starlette.responses import StreamingResponse
 
 ROOT=Path(__file__).resolve().parents[2]
 load_dotenv(ROOT/'.env',override=False)
@@ -126,9 +127,18 @@ class Question(BaseModel):
     destinations:list[dict]=Field(default_factory=list,max_length=100)
 
 
+class SpeechProfile(BaseModel):
+    voice:Literal['alloy','ash','ballad','coral','echo','fable','nova','onyx','sage','shimmer','verse','marin','cedar']
+    speedMultiplier:float=Field(ge=.25,le=4,allow_inf_nan=False,
+                                validation_alias=AliasChoices('speedMultiplier','speed_multiplier'))
+    instructions:str=Field(max_length=1000)
+    revision:str=Field(min_length=1,max_length=80,pattern=r'^[A-Za-z0-9_.:-]+$')
+
+
 class SpeechText(BaseModel):
     text:str=Field(min_length=1,max_length=500)
     language:Literal['vi','en']='vi'
+    speech_profile:SpeechProfile|None=None
 
 
 def spoken_text(text: str, limit: int = 500) -> str:
@@ -210,7 +220,7 @@ async def read_speech_body(request, media_type, limit):
     return bytes(raw)
 
 
-def transcribe_wav(raw,language):
+def transcribe_wav(raw,language,request_id=None):
     try:
         with wave.open(io.BytesIO(raw),'rb') as audio:
             n=audio.getnframes()
@@ -235,39 +245,63 @@ def transcribe_wav(raw,language):
         text=reply.text.strip()
         if len(text)>4000:raise ValueError()
     except Exception as error:
-        log.warning('DIRECT_STT_PROVIDER_ERROR code=%s',type(error).__name__)
+        log.warning('DIRECT_STT_PROVIDER_ERROR request_id=%s code=%s',request_id or 'unavailable',type(error).__name__)
         raise HTTPException(502,'DIRECT_STT_PROVIDER_ERROR') from None
     return {'text':text}
 
 
-def synthesize_wav(body):
-    timing = StageTimings()
-    try:
-        speed=float(os.getenv('AI_TTS_SPEED','1.2'))
-        if not .25<=speed<=4.:raise ValueError()
-        model_name = os.getenv('AI_TTS_MODEL', 'gpt-4o-mini-tts')
-        voice = os.getenv('AI_TTS_VOICE', 'nova')
-        cache_key = (model_name, voice, body.language, speed, body.text)
-        cacheable = body.language == 'vi' and body.text in PUBLIC_SPEECH
-        cached = public_speech_cache.get(body.text) if cacheable else None
-        if cached and cached[0] == cache_key:
-            total_ms = timing.finish()['total_ms']
-            timing_log.info('AI_SPEECH_TIMING op=synthesize cache=hit total_ms=%.0f bytes=%d chars=%d speed=%.2f',
-                            total_ms, len(cached[1]), len(body.text), speed)
-            return Response(cached[1], media_type='audio/wav', headers={
-                'Cache-Control': 'no-store', 'X-AI-Cache': 'public_speech',
-                'Server-Timing': f'tts_cache;dur={total_ms:.0f}',
-            })
+def speech_request_id(value=None):
+    try:return str(UUID(value))
+    except (ValueError,TypeError,AttributeError):return str(uuid4())
+
+
+def speech_options(body, audio_format):
+    """BE is the canonical profile; environment remains compatible with older Pi."""
+    profile=body.speech_profile
+    speed=profile.speedMultiplier if profile else float(os.getenv('AI_TTS_SPEED','1.2'))
+    if not .25<=speed<=4.:raise ValueError('INVALID_SPEECH_SPEED')
+    model_name=os.getenv('AI_TTS_MODEL','gpt-4o-mini-tts')
+    voice=profile.voice if profile else os.getenv('AI_TTS_VOICE','nova')
+    instructions=(profile.instructions if profile else os.getenv('AI_TTS_INSTRUCTIONS','').strip())
+    if not instructions:
         instructions=('Speak fluent Vietnamese with a natural conversational rhythm. '
                       if body.language=='vi' else 'Speak fluent English with a natural conversational rhythm. ')
-        instructions += ('Read the text exactly as one connected utterance, with brief pauses only at '
-                         'natural phrase or sentence boundaries. Do not insert pauses between words.')
+        instructions+=('Read the text exactly as one connected utterance, with brief pauses only at '
+                       'natural phrase or sentence boundaries. Do not insert pauses between words.')
+    revision=profile.revision if profile else 'environment'
+    # Include the full effective profile. A stale/incorrect supplied revision alone
+    # cannot reuse audio from different instructions or speed.
+    key=(model_name,voice,body.language,speed,instructions,revision,body.text,audio_format)
+    options=dict(model=model_name,voice=voice,input=body.text,speed=speed,
+                 response_format=audio_format,instructions=instructions)
+    slot=(body.text,audio_format) if body.language=='vi' and body.text in PUBLIC_SPEECH else None
+    return options,revision,key,slot
+
+
+def speech_headers(request_id,revision):
+    return {'Cache-Control':'no-store','X-Request-ID':request_id,
+            'X-Speech-Profile-Revision':revision}
+
+
+def synthesize_wav(body,request_id=None):
+    request_id=speech_request_id(request_id)
+    timing = StageTimings()
+    try:
+        options,revision,cache_key,slot=speech_options(body,'wav')
+        speed=options['speed']
+        cached=public_speech_cache.get(slot) if slot else None
+        if cached and cached[0] == cache_key:
+            total_ms = timing.finish()['total_ms']
+            timing_log.info('AI_SPEECH_TIMING request_id=%s op=synthesize cache=hit total_ms=%.0f bytes=%d chars=%d speed=%.2f profile=%s',
+                            request_id,total_ms,len(cached[1]),len(body.text),speed,revision)
+            return Response(cached[1],media_type='audio/wav',headers={**speech_headers(request_id,revision),
+                'X-AI-Cache':'public_speech',
+                'Server-Timing': f'tts_cache;dur={total_ms:.0f}',
+            })
         provider_started = time.perf_counter()
         first_byte_ms = None
         with timing.measure('provider_ms'):
-            with speech_client.get().audio.speech.with_streaming_response.create(
-                    model=model_name,voice=voice,
-                    input=body.text,speed=speed,response_format='wav',instructions=instructions) as reply:
+            with speech_client.get().audio.speech.with_streaming_response.create(**options) as reply:
                 audio=bytearray()
                 for chunk in reply.iter_bytes():
                     if not chunk:
@@ -278,19 +312,154 @@ def synthesize_wav(body):
                     audio.extend(chunk)
         if len(audio)<=44 or audio[:4]!=b'RIFF' or audio[8:12]!=b'WAVE':raise ValueError()
     except Exception as error:
-        log.warning('DIRECT_TTS_PROVIDER_ERROR code=%s',type(error).__name__)
+        log.warning('DIRECT_TTS_PROVIDER_ERROR request_id=%s code=%s',request_id,type(error).__name__)
         raise HTTPException(502,'DIRECT_TTS_PROVIDER_ERROR') from None
     raw = bytes(audio)
-    if cacheable:
-        public_speech_cache[body.text] = (cache_key, raw)
+    if slot:public_speech_cache[slot]=(cache_key,raw)
     timings = timing.finish()
-    timing_log.info('AI_SPEECH_TIMING op=synthesize first_byte_ms=%.0f provider_ms=%.0f total_ms=%.0f bytes=%d chars=%d speed=%.2f',
-                    first_byte_ms, timings['provider_ms'], timings['total_ms'], len(audio), len(body.text), speed)
-    return Response(raw, media_type='audio/wav', headers={
-        'Cache-Control': 'no-store',
+    timing_log.info('AI_SPEECH_TIMING request_id=%s op=synthesize first_byte_ms=%.0f provider_ms=%.0f total_ms=%.0f bytes=%d chars=%d speed=%.2f profile=%s',
+                    request_id,first_byte_ms,timings['provider_ms'],timings['total_ms'],len(audio),len(body.text),speed,revision)
+    return Response(raw,media_type='audio/wav',headers={**speech_headers(request_id,revision),
         'Server-Timing': (f'tts_first_byte;dur={first_byte_ms:.0f}, '
                           f'tts_provider;dur={timings["provider_ms"]:.0f}, tts_total;dur={timings["total_ms"]:.0f}'),
     })
+
+
+class SpeechLease:
+    """Keep provider capacity until a cancelled caller's worker actually exits."""
+    def __init__(self):
+        self.lock=threading.Lock()
+        self.active=0
+        self.close_requested=False
+        self.closed=False
+
+    async def run(self,function,*args):
+        with self.lock:
+            if self.close_requested:raise RuntimeError('SPEECH_LEASE_CLOSED')
+            self.active+=1
+        def worker():
+            try:return function(*args)
+            finally:
+                with self.lock:self.active-=1
+                self._finish_close()
+        task=asyncio.create_task(asyncio.to_thread(worker))
+        # A disconnected request no longer awaits this task, but the worker keeps
+        # ownership of its lease/context and its exception must still be retrieved.
+        def retrieve(done):
+            if not done.cancelled():done.exception()
+        task.add_done_callback(retrieve)
+        return await asyncio.shield(task)
+
+    def close(self):
+        with self.lock:self.close_requested=True
+        self._finish_close()
+
+    def _finish_close(self):
+        with self.lock:
+            if self.closed or not self.close_requested or self.active:return
+            self.closed=True
+        try:self._dispose()
+        finally:speech_capacity.release()
+
+    def _dispose(self):
+        pass
+
+
+class PcmSpeechStream(SpeechLease):
+    """One provider stream, bounded chunks, and a lease held until disconnect/EOF."""
+    def __init__(self,body,request_id):
+        super().__init__()
+        self.body,self.request_id=body,request_id
+        self.started=time.perf_counter()
+        self.options,self.revision,self.cache_key,self.slot=speech_options(body,'pcm')
+        self.context=None
+        self.entered=False
+        self.iterator=None
+        self.complete=False
+        self.bytes=0
+        self.audio=bytearray() if self.slot else None
+
+    def open(self):
+        cached=public_speech_cache.get(self.slot) if self.slot else None
+        self.cache_hit=bool(cached and cached[0]==self.cache_key)
+        if self.cache_hit:
+            raw=cached[1]
+            self.iterator=(raw[offset:offset+2048] for offset in range(0,len(raw),2048))
+        else:
+            self.context=speech_client.get().audio.speech.with_streaming_response.create(**self.options)
+            reply=self.context.__enter__()
+            self.entered=True
+            self.iterator=iter(reply.iter_bytes(chunk_size=2048))
+        self.first=self.next()
+        if not self.first:raise ValueError('EMPTY_PCM_STREAM')
+        self.first_byte_ms=(time.perf_counter()-self.started)*1000
+        return self
+
+    def next(self):
+        while True:
+            chunk=next(self.iterator,None)
+            if chunk is None:
+                if self.bytes%2:raise ValueError('INCOMPLETE_PCM_SAMPLE')
+                self.complete=True
+                if self.slot and not self.cache_hit and not self.close_requested:
+                    public_speech_cache[self.slot]=(self.cache_key,bytes(self.audio))
+                return None
+            if not chunk:continue
+            if self.bytes+len(chunk)>MAX_SPEECH_BYTES:raise ValueError('PCM_STREAM_TOO_LARGE')
+            self.bytes+=len(chunk)
+            if self.audio is not None and not self.cache_hit:self.audio.extend(chunk)
+            return chunk
+
+    def _dispose(self):
+        try:
+            if self.context and self.entered:self.context.__exit__(None,None,None)
+        finally:
+            if self.audio is not None:self.audio.clear()
+            timing_log.info('AI_SPEECH_TIMING request_id=%s op=synthesize_stream first_byte_ms=%.0f total_ms=%.0f bytes=%d chars=%d speed=%.2f profile=%s cache=%s complete=%s',
+                            self.request_id,getattr(self,'first_byte_ms',0),(time.perf_counter()-self.started)*1000,
+                            self.bytes,len(self.body.text),self.options['speed'],self.revision,
+                            'hit' if getattr(self,'cache_hit',False) else 'miss',self.complete)
+
+
+async def pcm_chunks(stream):
+    try:
+        yield stream.first
+        while True:
+            chunk=await stream.run(stream.next)
+            if chunk is None:break
+            yield chunk
+    except Exception as error:
+        log.warning('DIRECT_TTS_STREAM_ERROR request_id=%s code=%s',stream.request_id,type(error).__name__)
+        raise
+    finally:
+        # A native asyncio cancellation does not stop a provider thread. The
+        # lease defers closing its context and releasing capacity until it exits.
+        stream.close()
+
+
+class SpeechStreamingResponse(StreamingResponse):
+    def __init__(self,stream,**kwargs):
+        super().__init__(pcm_chunks(stream),**kwargs)
+        self.speech_stream=stream
+
+    async def __call__(self,scope,receive,send):
+        try:
+            await super().__call__(scope,receive,send)
+        finally:
+            # Also runs if response headers fail to send before the generator has
+            # started. StreamingResponse background tasks do not cover that case.
+            self.speech_stream.close()
+
+
+async def speech_text_body(request):
+    raw=await read_speech_body(request,'application/json',8192)
+    try:
+        body=SpeechText.model_validate_json(raw)
+        body.text=spoken_text(body.text)
+        if not body.text:raise ValueError()
+        return body
+    except ValueError:
+        raise HTTPException(422,'DIRECT_SPEECH_INVALID_TEXT') from None
 
 
 @app.post('/api/robot/speech/transcribe')
@@ -298,20 +467,22 @@ async def transcribe(request:Request, language:Literal['vi','en','auto']='auto',
     authorize(authorization)
     if not direct_speech_enabled():raise HTTPException(503,'DIRECT_SPEECH_DISABLED')
     if not speech_capacity.acquire(blocking=False):raise HTTPException(429,'DIRECT_SPEECH_BUSY')
+    lease=SpeechLease()
     try:
+        request_id=speech_request_id(request.headers.get('x-request-id'))
         timing = StageTimings()
         raw=await read_speech_body(request,'audio/wav',MAX_CAPTURE_BYTES)
         with timing.measure('worker_ms'):
-            value=await run_in_threadpool(transcribe_wav,raw,language)
+            value=await lease.run(transcribe_wav,raw,language,request_id)
         timings = timing.finish()
-        timing_log.info('AI_SPEECH_TIMING op=transcribe worker_ms=%.0f total_ms=%.0f bytes=%d',
-                        timings['worker_ms'], timings['total_ms'], len(raw))
+        timing_log.info('AI_SPEECH_TIMING request_id=%s op=transcribe worker_ms=%.0f total_ms=%.0f bytes=%d',
+                        request_id,timings['worker_ms'],timings['total_ms'],len(raw))
         return Response(json.dumps(value,ensure_ascii=False), media_type='application/json', headers={
-            'Cache-Control': 'no-store',
+            'Cache-Control':'no-store','X-Request-ID':request_id,
             'Server-Timing': f'stt_worker;dur={timings["worker_ms"]:.0f}, stt_total;dur={timings["total_ms"]:.0f}',
         })
     finally:
-        speech_capacity.release()
+        lease.close()
 
 
 @app.post('/api/robot/speech/synthesize')
@@ -319,17 +490,41 @@ async def synthesize(request:Request, authorization:str|None=Header(default=None
     authorize(authorization)
     if not direct_speech_enabled():raise HTTPException(503,'DIRECT_SPEECH_DISABLED')
     if not speech_capacity.acquire(blocking=False):raise HTTPException(429,'DIRECT_SPEECH_BUSY')
+    lease=SpeechLease()
     try:
-        raw=await read_speech_body(request,'application/json',8192)
-        try:
-            body=SpeechText.model_validate_json(raw)
-            body.text = spoken_text(body.text)
-            if not body.text:raise ValueError()
-        except ValueError:
-            raise HTTPException(422,'DIRECT_SPEECH_INVALID_TEXT') from None
-        return await run_in_threadpool(synthesize_wav,body)
+        body=await speech_text_body(request)
+        return await lease.run(synthesize_wav,body,speech_request_id(request.headers.get('x-request-id')))
     finally:
-        speech_capacity.release()
+        lease.close()
+
+
+@app.post('/api/robot/speech/synthesize/stream')
+async def synthesize_stream(request:Request,authorization:str|None=Header(default=None)):
+    authorize(authorization)
+    if not direct_speech_enabled():raise HTTPException(503,'DIRECT_SPEECH_DISABLED')
+    if not speech_capacity.acquire(blocking=False):raise HTTPException(429,'DIRECT_SPEECH_BUSY')
+    stream=None
+    try:
+        body=await speech_text_body(request)
+        request_id=speech_request_id(request.headers.get('x-request-id'))
+        stream=PcmSpeechStream(body,request_id)
+        # Open + first chunk before sending HTTP 200, so a provider rejection can
+        # still return 502 and old clients can safely choose the WAV fallback.
+        await stream.run(stream.open)
+        return SpeechStreamingResponse(stream,media_type='audio/pcm',headers={
+            **speech_headers(request_id,stream.revision),
+            'X-Audio-Format':'pcm_s16le_24000_mono','X-Accel-Buffering':'no',
+            'X-AI-Cache':'public_speech' if stream.cache_hit else 'miss',
+            'Server-Timing':f'tts_first_byte;dur={stream.first_byte_ms:.0f}',
+        })
+    except BaseException as error:
+        if stream:stream.close()
+        else:speech_capacity.release()
+        if isinstance(error,HTTPException):raise
+        if not isinstance(error,Exception):raise
+        log.warning('DIRECT_TTS_PROVIDER_ERROR request_id=%s code=%s',
+                    getattr(stream,'request_id','unavailable'),type(error).__name__)
+        raise HTTPException(502,'DIRECT_TTS_PROVIDER_ERROR') from None
 
 @app.get('/health')
 def health():
@@ -342,7 +537,7 @@ def health():
     knowledge_ready=bool(os.getenv('OPENAI_API_KEY')) if vector_store_id else bool(published or local_ready)
     ready=bool(os.getenv('AI_ROBOT_API_TOKEN') and knowledge_ready)
     return dict(state='READY' if ready else 'NOT_CONFIGURED',faq_active=faq_active,faq_available=faq_available,
-        direct_speech=direct_speech_enabled(),
+        direct_speech=direct_speech_enabled(),speech_stream=direct_speech_enabled(),
         answer_mode='VECTOR_STORE' if vector_store_id else 'FAQ_AND_RAG' if os.getenv('OPENAI_API_KEY') else 'FAQ_ONLY',
         model=model,intent_model=intent_model,provider='openai',embedding=type(store.embeddings).__name__,vector_count=len(store.points),wake=wake_status(),
         model_client_initialized=rag._openai.initialized,navigation_client_initialized=navigation_client.initialized,
@@ -362,20 +557,36 @@ async def wake(request: Request, authorization: str | None = Header(default=None
     if not wake_capacity.acquire(blocking=False):
         raise HTTPException(429, 'WAKE_BUSY')
     raw = bytearray()
+    received_at = time.monotonic()
+    worker = None
     try:
         async for block in request.stream():
             if len(raw) + len(block) > MAX_PCM_BYTES:
                 raise HTTPException(413, 'WAKE_AUDIO_TOO_LARGE')
             raw.extend(block)
         try:
-            return await run_in_threadpool(detect, bytes(raw))
+            upload_ms = round((time.monotonic() - received_at) * 1000)
+            worker = asyncio.create_task(run_in_threadpool(detect, bytes(raw), request.headers.get('x-request-id')))
+            def completed(task):
+                # The request may disappear while CPU inference is running.
+                # Keep the one-worker lease until inference actually finishes.
+                try:
+                    if not task.cancelled():task.exception()
+                finally:
+                    wake_capacity.release()
+            worker.add_done_callback(completed)
+            result = await asyncio.shield(worker)
+            result['upload_ms'] = upload_ms
+            return Response(content=json.dumps(result), media_type='application/json', headers={
+                'X-Request-ID': result['request_id'], 'Cache-Control': 'no-store',
+                'Server-Timing': 'wake_upload;dur='+str(upload_ms)+', wake_decode;dur='+str(result['decode_ms'])})
         except ValueError as error:
             raise HTTPException(422, str(error)) from None
         except (RuntimeError, ImportError, OSError):
             raise HTTPException(503, 'WAKE_ENGINE_UNAVAILABLE') from None
     finally:
         raw.clear()
-        wake_capacity.release()
+        if worker is None:wake_capacity.release()
 
 @app.post('/api/robot/chat')
 def chat(q:Question,response:Response,authorization:str|None=Header(default=None)):

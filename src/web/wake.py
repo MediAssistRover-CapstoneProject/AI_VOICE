@@ -23,7 +23,7 @@ _recognizer = None
 _model_path = None
 _lock = threading.Lock()
 _statistics_lock = threading.Lock()
-_counts = {'processed': 0, 'detected': 0, 'low_energy': 0, 'no_match': 0}
+_counts = {'processed': 0, 'detected': 0, 'low_energy': 0, 'no_match': 0, 'empty': 0}
 _last_decision = None
 
 
@@ -63,6 +63,7 @@ def status() -> dict:
         counts = dict(_counts)
         decision = dict(_last_decision) if _last_decision is not None else None
     return dict(enabled=enabled, phrase=phrase, aliases=list(aliases), engine=ENGINE,
+                mode='utterance_asr', accepted_phrases=list(dict.fromkeys((phrase, *aliases))),
                 configured=bool(normalize(phrase)) and model_exists(model_path),
                 loaded=_recognizer is not None and _model_path == model_path,
                 statistics=counts, last_decision=decision)
@@ -75,12 +76,15 @@ def _record_decision(result: dict, reason: str) -> dict:
     with _statistics_lock:
         _counts['processed'] += 1
         _counts[{'MATCH': 'detected', 'LOW_AUDIO_ENERGY': 'low_energy',
-                 'NO_PHRASE_MATCH': 'no_match'}[reason]] += 1
+                 'NO_PHRASE_MATCH': 'no_match', 'EMPTY_RECOGNITION': 'empty'}[reason]] += 1
         _last_decision = {key: result[key] for key in
-                          ('detected', 'reason', 'audio_ms', 'rms', 'processing_ms')}
+                          ('request_id', 'detected', 'reason', 'audio_ms', 'rms',
+                           'processing_ms', 'queue_ms', 'decode_ms')}
     logging.getLogger('uvicorn.error').info(
-        'WAKE_DECISION detected=%s reason=%s audio_ms=%d rms=%.5f processing_ms=%d',
-        result['detected'], reason, result['audio_ms'], result['rms'], result['processing_ms'])
+        'WAKE_DECISION request_id=%s detected=%s reason=%s audio_ms=%d rms=%.5f '
+        'processing_ms=%d queue_ms=%d decode_ms=%d',
+        result['request_id'], result['detected'], reason, result['audio_ms'],
+        result['rms'], result['processing_ms'], result['queue_ms'], result['decode_ms'])
     return result
 
 
@@ -108,7 +112,7 @@ def preload():
     return status()
 
 
-def detect(pcm: bytes) -> dict:
+def detect(pcm: bytes, request_id: str | None = None) -> dict:
     import numpy as np
 
     global _recognizer, _model_path
@@ -124,17 +128,29 @@ def detect(pcm: bytes) -> dict:
 
     samples = np.frombuffer(pcm, dtype='<i2').astype(np.float32) / 32768.0
     energy = float(np.mean(samples * samples))
+    # Correlation only. Never put decoded background speech or user audio in logs.
+    from uuid import UUID, uuid4
+    try:
+        request_id = str(UUID(request_id)) if request_id else str(uuid4())
+    except (ValueError, TypeError, AttributeError):
+        request_id = str(uuid4())
     result = dict(detected=False, phrase=phrase, engine=ENGINE, processing_ms=0,
+                  request_id=request_id, queue_ms=0, decode_ms=0,
                   audio_ms=round(len(samples) * 1000 / SAMPLE_RATE), rms=round(energy ** .5, 5))
     if energy < .003 ** 2:
         return _record_decision(result, 'LOW_AUDIO_ENERGY')
 
     started = time.monotonic()
     with _lock:
+        acquired = time.monotonic()
+        result['queue_ms'] = round((acquired - started) * 1000)
         recognizer = _load_recognizer(model_path)
         stream = recognizer.create_stream()
         stream.accept_waveform(SAMPLE_RATE, samples)
         recognizer.decode_stream(stream)
-        result['detected'] = matching_key(stream.result.text) in expected
+        decoded_key = matching_key(stream.result.text)
+        result['detected'] = decoded_key in expected
+        result['decode_ms'] = round((time.monotonic() - acquired) * 1000)
     result['processing_ms'] = round((time.monotonic() - started) * 1000)
-    return _record_decision(result, 'MATCH' if result['detected'] else 'NO_PHRASE_MATCH')
+    reason = 'MATCH' if result['detected'] else 'NO_PHRASE_MATCH' if decoded_key else 'EMPTY_RECOGNITION'
+    return _record_decision(result, reason)

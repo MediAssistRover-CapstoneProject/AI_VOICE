@@ -1,5 +1,99 @@
 # Độ trễ Voice: đã giảm gì và đo thế nào?
 
+## Đối chiếu production ngày 19/11/2026 và hướng hoàn thiện
+
+Phạm vi: companion native Pi tại `192.168.1.137`, AI Voice trên EC2 media.
+Log ban đầu bên dưới lấy từ release `19f325ed17dba37e3e909eba0f8e397439b4758c`.
+Các ghi chú 07/11 ở phần dưới là lịch sử, không mô tả đầy đủ đường đi direct speech hiện tại.
+
+### Bản đã triển khai và kiểm tra ngày 19/11
+
+- BE đã triển khai bản build theo nội dung `f20be37f822641939fdd9c0bb36be60a0de1da3f`;
+  AI Voice `a6f6c1590089d9410347f0ac44d16b6a5d32e194`. Đây là mã băm nội dung
+  bản cài thủ công, không phải Git commit. Source còn ở local, cần push để lần CI sau giữ bản sửa.
+- Pi đã cài đúng 5 file production: `voice_wake.py`, `voice_client.py`, `voice_chat.py`,
+  `voice_runtime.py`, `media_client.py`. Không cài file test; giữ stack dừng, không phát lệnh bánh.
+- Giữ `M A`, các cách đọc `em a`, `mờ a`. Thu liên tục trong lúc chờ inference;
+  chỉ giữ hai candidate trong RAM, loại candidate chờ quá 2,5 giây. Khi nhường workflow,
+  dừng/reap `arecord` và hủy kết nối audio đang chờ.
+- Lọc DC/tiếng ù bằng high-pass 70 Hz trước VAD. Ngưỡng onset là
+  `max(0.004, nền_nonspeech × 10^(6/20))`; nền thích nghi từ các khung không có lời nói.
+  Sau onset dùng ngưỡng release thấp hơn để giữ âm nhẹ. Đây không phải tách người nói
+  hoặc khử mọi loại tiếng ồn; tiếng lớn vẫn phải được ASR nhận đúng toàn bộ wake phrase.
+- Client HTTPS tái sử dụng tối đa hai kết nối mỗi origin, không tự phát lại POST lỗi mạng.
+  Profile lấy từ catalog voice hoặc `/api/v1/pi/speech/profile`, hỗ trợ ETag/304;
+  voice/speed/instructions/revision được chuyển tới AI. Quyền và điều kiện tạo MOVE vẫn kiểm tra trực tiếp ở BE.
+- Endpoint mới `/api/robot/speech/synthesize/stream`: PCM16 mono 24 kHz,
+  Nginx tắt buffering, Pi chờ buffer 120 ms rồi phát nguyên câu. Chỉ fallback WAV khi
+  chưa bắt đầu phát; không đọc lại một câu đã phát dở. Giữ lease tới khi provider thread
+  thật sự kết thúc, kể cả khi client ngắt trước khi nhận header.
+- Chỉ cache hai câu công khai chào/tạm biệt theo đầy đủ profile, ở RAM. Câu trả lời riêng
+  không cache. Log chứa request ID và timing; không ghi âm hay transcript wake.
+- Kiểm tra: 40 kiểm tra AI trong bộ CI đạt; 6 kiểm tra BE đạt; Pi 27 kiểm tra,
+  1 bỏ qua do thiếu fixture. Các kiểm tra bổ sung nằm trong file test sẵn có.
+- API thật từ Pi: profile `nova`, `1.2`, revision `7c3211a5664056bc`; conditional GET trả 304.
+  Một câu mới: nhận header 1.714 s, đủ buffer đầu 2.088 s, nhận hết 2.176 s, 116150 byte PCM.
+  Đây là một mẫu truyền tải, không phải p95 hoặc thời gian âm thanh thực phát ra loa.
+  Lời chào sau prewarm đọc buffer RAM đầu trong dưới 1 ms. High-pass đo khoảng
+  0.413 ms/khung 30 ms trên Pi. Chưa có lượt gọi thật có nhãn sau bản vá nên chưa kết luận recall.
+
+Wake vẫn dùng ASR tiếng Việt hiện có; chưa thay thành KWS chuyên dụng hoặc hứa độ nhạy như Siri.
+Với câu gọi ngắn `M A`, cần đo các lượt nói thật và số wake nhầm trong tiếng nền trước khi hiệu chỉnh thêm.
+
+### Bằng chứng từ lượt thử chiều
+
+- Trong khoảng log Pi 14:59–19:05 giờ Việt Nam: 608 candidate wake được gửi;
+  server ghi 607 `NO_PHRASE_MATCH`, một `MATCH` lúc 17:32:54. Candidate gồm cả
+  tiếng nền, nên đây không phải số lần người dùng chủ động thử hay phép đo recall.
+- Pi loại 135 đoạn `TOO_LONG` trước khi gửi; hai đoạn ghi nhận clipping.
+- Wake inference: trung vị 102 ms, p95 238 ms, tối đa 916 ms. Không có
+  `LOW_AUDIO_ENERGY` trong cửa sổ này. PCM đã tới AI; chưa xác định được nhận sai
+  cách phát âm hay đoạn thu chứa tiếng khác vì không lưu audio/transcript wake.
+- Wake hiện dùng Zipformer tiếng Việt 30M int8, nhận dạng nguyên đoạn rồi so bằng
+  toàn bộ chuỗi chuẩn hóa với `M A`, `em a`, `mờ a`. Đây chưa phải bộ keyword spotting.
+- Một lượt: Pi STT 4.014 s, còn worker STT trên AI 1.504 s. Khâu answer phía Pi
+  4.920 s, trong khi AI xử lý navigation proposal khoảng 1 ms. Các khoảng chênh
+  bao gồm truyền tải, hàng đợi và các bước BE/client; không phải thời gian LLM thuần.
+- TTS câu mới: first byte phía provider 1.224 s, nhận đủ audio 2.226 s, Pi bắt
+  đầu phát sau 5.046 s. Endpoint hiện gom đủ WAV rồi mới trả, Pi nhận đủ rồi phát.
+- AI và BE hiện đều `nova`, tốc độ `1.2`. AI chat/intent là `gpt-6-luna`;
+  TTS code dùng `gpt-4o-mini-tts`. Không có bằng chứng cần đổi model chat để sửa wake.
+- Snapshot sau lượt thử: Voice dùng khoảng 212 MiB; máy còn khoảng 2.8 GiB RAM
+  khả dụng. Đây không phải phép đo CPU/RAM tại thời điểm tải cao.
+
+### Thứ tự thực hiện đề xuất
+
+1. **Chẩn đoán và capture wake:** thêm request ID xuyên Pi/AI, các thời gian
+   capture/upload/queue/inference/response; phân biệt ASR rỗng với không khớp.
+   Giữ metrics, không lưu mặc định âm thanh hoặc lời nói nền. Đo riêng cách đọc
+   “mờ a”, “em a”, “em ay” trong yên tĩnh và tiếng ồn; chỉ số cần có là recall
+   trên các lượt có nhãn, tự wake/giờ và độ trễ tới lời chào.
+2. **Giảm bỏ sót:** đệm đầu/đuôi âm thanh và lọc nhiễu nhẹ trước VAD; giữ thu
+   liên tục vào bộ đệm RAM có giới hạn khi request đang xử lý để tránh khoảng mù.
+   Không chỉ nâng trần 4 giây hoặc so chuỗi con tùy ý. Đánh giá KWS streaming có
+   hỗ trợ cách phát âm cần dùng; kiểm chứng mô hình/ngôn ngữ trước khi thay ASR.
+   Giữ các model hội thoại và TTS trên EC2 hiện tại.
+3. **Giảm round trip:** client HTTP có pooling/keepalive; cache catalog/profile
+   theo map/session/revision và vô hiệu khi đổi phiên. Chuẩn bị lời chào công khai.
+   BE vẫn xác nhận quyền, phiên và tạo job; không để AI tự điều khiển motor.
+4. **Phát lời đáp sớm:** endpoint audio streaming riêng, Pi phát khi đủ buffer
+   nhỏ; ưu tiên độ liền câu, không tổng hợp từng token. Đo WAV/PCM streaming trước;
+   đánh giá Opus khi truyền tải trên mạng là nút thắt. Giữ đường WAV cũ làm tương thích.
+   Đồng bộ voice/speed/instructions từ một speech profile có revision của BE.
+5. **Rollout từng lớp:** capture/wake trước, HTTP/caching sau, audio streaming cuối.
+   Ghi rõ fallback đang dùng, thử vài tình huống có nhãn; không chạy model hội thoại
+   cho mọi tiếng nền, không hứa độ trễ cố định trước khi đo lại trên robot.
+
+Chưa cần mua instance mới hoặc train model hội thoại. Nếu KWS hiện có không đạt
+được tiếng Việt/Anh đã chọn, mới cân nhắc dữ liệu wake có nhãn để hiệu chỉnh/train.
+Không train model wake bằng các candidate chưa biết có thật sự chứa keyword hay không.
+
+Nguồn kỹ thuật:
+[Sherpa keyword spotting](https://k2-fsa.github.io/sherpa/onnx/kws/index.html),
+[OpenAI streaming TTS và định dạng audio](https://developers.openai.com/api/docs/guides/text-to-speech).
+
+## Ghi chú lịch sử 07/11/2026
+
 Cập nhật 07/11/2026. [Đối chiếu code](VOICE_CHANGELOG_2026-11-07.md) tách main `81c1508`, phần thêm trong AI và bản Pi native từ `e8d1ed6`. Bàn giao theo [hướng dẫn Pi](RASPBERRY_PI_VOICE_SETUP.md) và [gói vá](../deploy/pi/README.md).
 
 ## Hai loại thời gian
