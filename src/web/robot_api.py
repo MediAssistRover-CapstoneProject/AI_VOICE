@@ -601,7 +601,11 @@ def chat(q:Question,response:Response,authorization:str|None=Header(default=None
         old=cache.get(identity)
         if old and now-old[0]<600:
             if old[1]!=fingerprint:raise HTTPException(409,'TURN_ID_REUSED_WITH_DIFFERENT_INPUT')
-            if not published or old[3]==catalog_revision:
+            replay_current = (not published or old[3]==catalog_revision)
+            if vector_store_id and old[2].get('answer_mode') == 'vector_store':
+                try: replay_current = rag.hosted_store.sources_current(old[2].get('sources', []))
+                except RuntimeError: raise HTTPException(503,'AI_KNOWLEDGE_UNAVAILABLE') from None
+            if replay_current:
                 response.headers['X-AI-Cache']='turn_replay'
                 response.headers['Server-Timing']='ai_total;dur='+str(timing.finish()['total_ms'])
                 return old[2]

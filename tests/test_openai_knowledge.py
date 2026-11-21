@@ -21,6 +21,7 @@ def test_real_sdk_decodes_vector_search_json():
     transport = httpx.MockTransport(lambda request: httpx.Response(200, json={'data': []}))
     with OpenAI(api_key='mock-key', http_client=httpx.Client(transport=transport)) as sdk:
         store = OpenAIVectorStore(STORE, NS(get=lambda: sdk))
+        store.resolver = Mock(resolve=Mock(return_value={}))
         assert store.search('MAR LANTERN') == ('', [])
 
 
@@ -30,6 +31,9 @@ def pipeline():
     rag = HospitalRAGPipeline(store, openai_api_key='mock-key', llm_model='gpt-4o-mini',
                               require_model=True, openai_vector_store_id=STORE)
     client = Mock()
+    rag.hosted_store.resolver = Mock(resolve=Mock(return_value={
+        'file-test': dict(fileId='file-test', title='Giờ khám.txt', pipelineVersion=2,
+                          text='Giờ khám từ 7 giờ đến 17 giờ.')}))
     client.with_options.return_value = client
     client.post.return_value = {'data': [{'file_id': 'file-test', 'filename': 'document.txt',
         'attributes': {'title': 'Giờ khám.txt'}, 'score': .9,
@@ -114,3 +118,58 @@ def test_navigation_sos_and_auth_keep_existing_routes(api_client):
     assert result['intent'] == 'EMERGENCY_SOS'
     assert result['action'] is None
     provider.post.assert_not_called()
+
+
+def test_unpublished_search_results_never_reach_model(pipeline):
+    rag, provider = pipeline
+    rag.hosted_store.resolver.resolve.return_value = {}
+    result = rag.answer_question('Giờ khám?')
+    assert result['answer_mode'] == 'no_context' and result['sources'] == []
+    provider.chat.completions.create.assert_not_called()
+
+
+def test_complete_chunk_preserves_condition_beyond_old_character_cutoff(pipeline):
+    rag, provider = pipeline
+    content = 'Giờ khám 7 giờ. ' * 180 + 'Ngoại lệ: Chủ nhật không tiếp nhận.'
+    rag.hosted_store.resolver.resolve.return_value['file-test']['text'] = content
+    rag.answer_question('Chủ nhật có khám không?')
+    context = provider.chat.completions.create.call_args.kwargs['messages'][0]['content']
+    assert 'Ngoại lệ: Chủ nhật không tiếp nhận.' in context
+    assert '[Giờ khám.txt]' not in context
+
+
+def test_withdrawal_during_generation_discards_answer(pipeline):
+    rag, provider = pipeline
+    published = rag.hosted_store.resolver.resolve.return_value
+    rag.hosted_store.resolver.resolve.side_effect = [published, {}]
+    result = rag.answer_question('Giờ khám?')
+    assert result['answer_mode'] == 'no_context' and not result['sources']
+
+
+def test_backend_outage_fails_closed(pipeline):
+    rag, provider = pipeline
+    rag.hosted_store.resolver.resolve.side_effect = RuntimeError('private service data')
+    with pytest.raises(RuntimeError, match='^AI_KNOWLEDGE_UNAVAILABLE$'):
+        rag.answer_question('Giờ khám?')
+    provider.chat.completions.create.assert_not_called()
+
+
+def test_withdrawn_answer_is_not_replayed(api_client):
+    http, provider = api_client
+    from src.web import robot_api as api
+    request = question('Giờ khám?')
+    assert http.post('/api/robot/chat', json=request, headers=HEADERS).json()['answer_mode'] == 'vector_store'
+    api.rag.hosted_store.resolver.resolve.return_value = {}
+    result = http.post('/api/robot/chat', json=request, headers=HEADERS).json()
+    assert result['answer_mode'] == 'no_context'
+    assert result['action'] is None and result['sources'] == []
+
+
+def test_long_or_truncated_generation_does_not_lose_a_condition_in_speech(pipeline):
+    rag, provider = pipeline
+    provider.chat.completions.create.return_value = NS(choices=[NS(message=NS(content='Giờ khám 7 giờ. ' * 60 + 'Trừ Chủ nhật.'))])
+    result = rag.answer_question('Giờ khám?')
+    assert result['answer'] == 'Tôi không trả lời thông tin này được.'
+    provider.chat.completions.create.return_value = NS(choices=[NS(finish_reason='length',message=NS(content='Giờ khám 7 giờ, trừ'))])
+    with pytest.raises(RuntimeError, match='AI_MODEL_UNAVAILABLE'):
+        rag.answer_question('Giờ khám?')

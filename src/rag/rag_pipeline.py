@@ -171,11 +171,21 @@ class HospitalRAGPipeline:
             with timing.measure('generation_ms'):
                 answer = self._generate_answer(question, context, safe_history, timeout_seconds=18)
             mode = 'vector_store'
+            # The robot's speech contract caps text at 500 characters. Never let
+            # that downstream cap silently remove a qualification from a doc answer.
+            if len(answer) > 500:
+                answer = 'Tôi không trả lời thông tin này được.'
+                mode = 'answer_too_long'
+            # A document can be withdrawn/replaced while generation is in flight.
+            if not self.hosted_store.sources_current(sources):
+                answer, context, sources, mode = 'Tôi không trả lời thông tin này được.', '', [], 'no_context'
         return dict(answer=answer, sources=sources, context_used=context,
                     confidence=max((source['score'] for source in sources), default=0.),
                     answer_mode=mode, timings_ms=timing.finish())
 
     def close(self):
+        if self.hosted_store:
+            self.hosted_store.resolver.close()
         self._openai.close()
 
     def lookup_faq(self, question: str):
@@ -227,6 +237,8 @@ class HospitalRAGPipeline:
                     ],
                     **completion_options(self.llm_model,240),
                 )
+                if getattr(resp.choices[0], 'finish_reason', None) == 'length':
+                    raise RuntimeError('AI_MODEL_OUTPUT_INCOMPLETE')
                 answer = resp.choices[0].message.content.strip()
                 log.debug("[RAG-OpenAI] Generated answer, length=%d", len(answer))
                 return answer
