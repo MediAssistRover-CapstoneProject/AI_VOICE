@@ -164,6 +164,10 @@ def normalized(text):
 def navigation_action(q,intent):
     """Resolve language against live candidates; never generate coordinates or a workflow."""
     plain=normalized(q.text);label=endpoint_destination(q.text)
+    # A location question is answered from knowledge first. A separate catalog
+    # proposal can follow; the Pi still requires explicit consent before a job.
+    if not label and any(term in plain for term in ('o dau','nam dau','cho nao')):
+        return False,None
     if not label and intent.intent!='ESCORT_REQUEST' and not re.search(r'\b(take|guide|bring|navigate|lead|dan|dua|diem|endpoint|directions|go to|get to)\b',plain):
         return False,None
     candidates=[]
@@ -199,6 +203,28 @@ def navigation_action(q,intent):
         import logging
         logging.getLogger('mar_voice').warning('Navigation language resolution unavailable: %s',type(exc).__name__)
     return True,None
+
+
+def information_destination(question, answer, destinations):
+    def location_words(value):
+        return ' '.join(re.sub(r'[^a-z0-9]+', ' ', normalized(str(value))).split())
+    plain=location_words(question)
+    if not any(term in plain for term in ('o dau','nam dau','cho nao','dan toi','dua toi')):
+        return None
+    if not answer or answer == 'Tôi không trả lời thông tin này được.':
+        return None
+    spoken=location_words(answer)
+    target='phong le tan' if 'xe lan' in plain and 'le tan' in spoken else None
+    found=[]
+    for point in destinations:
+        try: identity=str(UUID(point.get('endpointId','')))
+        except (ValueError,TypeError,AttributeError): continue
+        names=[location_words(point.get(k,'')) for k in ('endpointName','roomName')]
+        if (target and target in names) or (not target and any(n and n in plain and n in spoken for n in names)):
+            found.append((identity,point))
+    if len(found)!=1:return None
+    identity,point=found[0]
+    return dict(kind='NAVIGATE',endpoint_id=identity,destination_label=point.get('roomName') or point.get('endpointName'))
 
 def authorize(value):
     token=os.getenv('AI_ROBOT_API_TOKEN','')
@@ -678,6 +704,8 @@ def chat(q:Question,response:Response,authorization:str|None=Header(default=None
                 if match.get('file_id'):source['file_id']=match['file_id']
                 article_id=match.get('metadata',{}).get('article_id')
                 if article_id:source['article_id']=article_id
+            if answer_mode in ('vector_store','generated','answer_cache') and sources:
+                action=information_destination(q.text,answer,q.destinations)
         timings=timing.finish()
         timing_log.info('AI_CHAT_TIMING mode=%s total_ms=%.0f retrieval_ms=%.0f generation_ms=%.0f navigation_ms=%.0f',
                         answer_mode, timings['total_ms'], timings.get('rag_retrieval_ms', 0),
