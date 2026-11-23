@@ -157,6 +157,14 @@ def spoken_text(text: str, limit: int = 500) -> str:
     return words[0] if len(words) > 1 else text[:limit]
 
 
+def direct_speech_answer(answer: str) -> str:
+    """Drop a source preamble from speech while keeping the answer itself intact."""
+    return re.sub(
+        r'^(?:(?:theo|dựa theo) tài liệu(?: mô phỏng| demo)?|trong (?:tài liệu|mô hình) demo)\s*[,.:;]\s*',
+        '', answer.strip(), count=1, flags=re.IGNORECASE,
+    ) or answer
+
+
 def normalized(text):
     return ' '.join(''.join(c for c in unicodedata.normalize('NFD',text.casefold().replace('đ','d'))
                             if unicodedata.category(c)!='Mn').strip(' !?.').split())
@@ -712,9 +720,7 @@ def chat(q:Question,response:Response,authorization:str|None=Header(default=None
                         timings.get('rag_generation_ms', 0), timings.get('navigation_ms', 0))
         response.headers['X-AI-Cache']='answer_cache' if answer_mode=='answer_cache' else 'miss'
         response.headers['Server-Timing']='ai_total;dur='+str(timings['total_ms'])
-        speech_text=answer
-        if not vector_store_id and not published and sources and answer!='Tôi không trả lời thông tin này được.':
-            speech_text='Theo tài liệu mô phỏng, '+answer
+        speech_text=direct_speech_answer(answer)
         payload=dict(session_id=str(q.session_id),turn_id=str(q.turn_id),answer=answer,
             speech_text=spoken_text(speech_text) or 'Tôi không có nội dung để đọc.',intent=intent.intent,
             confidence=intent.confidence,sources=sources,action=action,end_session=end,model=response_model,

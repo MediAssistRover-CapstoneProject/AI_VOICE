@@ -239,6 +239,22 @@ def test_api_faq_stage_metrics_and_exact_replay_contract(client):
     assert http.post('/api/robot/chat', json=request, headers=HEADERS).status_code == 409
 
 
+def test_source_answer_is_spoken_without_demo_prefix(client, monkeypatch):
+    http, api = client
+    monkeypatch.setattr(api, 'published', None)
+    monkeypatch.setattr(api, 'vector_store_id', '')
+    with patch.object(api.rag, 'answer_question', return_value={
+        'answer': 'Trong mô hình demo, Phòng tiêm chủng ở tầng hai.',
+        'answer_mode': 'generated',
+        'sources': [{'source': 'Tài liệu demo', 'score': 0.9}],
+        'timings_ms': {},
+    }):
+        result = http.post('/api/robot/chat', json=body('Phòng tiêm chủng ở đâu?'), headers=HEADERS)
+    assert result.status_code == 200
+    assert result.json()['speech_text'] == 'Phòng tiêm chủng ở tầng hai.'
+    assert result.json()['sources'][0]['source'] == 'Tài liệu demo'
+
+
 def test_api_auth_and_busy_are_preserved(client):
     http, api = client
     assert http.post('/api/robot/chat', json=body()).status_code == 401

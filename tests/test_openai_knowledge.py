@@ -50,6 +50,7 @@ def test_search_and_generation_use_store_and_return_sources_without_answer_cache
     assert client.post.call_count == 2
     assert client.post.call_args.args[0] == '/vector_stores/' + STORE + '/search'
     assert client.post.call_args.kwargs['options']['headers']['OpenAI-Beta'] == 'assistants=v2'
+    assert client.post.call_args.kwargs['body']['rewrite_query'] is True
     assert first['answer_mode'] == 'vector_store'
     assert first['sources'][0]['file_id'] == 'file-test'
     assert first['sources'][0]['source'] == 'Giờ khám.txt'
@@ -75,6 +76,24 @@ def test_no_context_and_provider_failure_are_explicit(pipeline):
     client.post.side_effect = RuntimeError('private upstream response')
     with pytest.raises(RuntimeError, match='^AI_KNOWLEDGE_UNAVAILABLE$'):
         rag.answer_question('Giờ khám?')
+
+
+def test_paraphrased_question_uses_rewritten_search_and_grounded_speech(pipeline):
+    rag, client = pipeline
+    rag.hosted_store.resolver.resolve.return_value = {
+        'file-test': dict(fileId='file-test', title='Liên hệ.pdf', pipelineVersion=2,
+                          text='Tổng đài bệnh viện: 1900 1234.')}
+    def search(_path, **kwargs):
+        assert kwargs['body']['query'] == 'Số điện thoại liên hệ bệnh viện là gì?'
+        assert kwargs['body']['rewrite_query'] is True
+        return {'data': [{'file_id': 'file-test', 'filename': 'Liên hệ.pdf', 'score': .89,
+                          'content': [{'type': 'text', 'text': 'Tổng đài bệnh viện: 1900 1234.'}]}]}
+    client.post.side_effect = search
+    client.chat.completions.create.return_value = NS(choices=[NS(message=NS(
+        content='Bạn có thể gọi tổng đài bệnh viện theo số 1900 1234.'))])
+    answer = rag.answer_question('Số điện thoại liên hệ bệnh viện là gì?')
+    assert answer['answer'] == 'Bạn có thể gọi tổng đài bệnh viện theo số 1900 1234.'
+    assert answer['sources'][0]['source'] == 'Liên hệ.pdf'
 
 
 @pytest.fixture

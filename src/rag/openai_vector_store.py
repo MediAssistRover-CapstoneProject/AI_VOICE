@@ -27,6 +27,7 @@ class OpenAIVectorStore:
                 cast_to=dict[str, Any],
                 options={'headers': {'OpenAI-Beta': 'assistants=v2'}},
                 body={'query': question, 'max_num_results': 20,
+                      'rewrite_query': True,
                       'ranking_options': {'ranker': 'auto', 'score_threshold': 0.2}},
             )
             matches = result['data']
