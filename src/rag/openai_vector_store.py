@@ -46,7 +46,7 @@ class OpenAIVectorStore:
                     continue
                 text = '\n'.join(part['text'] for part in match.get('content', [])
                                  if part.get('type') == 'text' and isinstance(part.get('text'), str)).strip()
-                if publication['pipelineVersion'] == 2:
+                if publication['pipelineVersion'] >= 2:
                     text = publication['text']  # Complete BE chunk; never cut off an exception/table row.
                 if not text or text in seen:
                     continue

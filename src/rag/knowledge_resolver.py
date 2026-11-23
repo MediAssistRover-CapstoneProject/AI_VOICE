@@ -37,7 +37,7 @@ class KnowledgeResolver:
             if not isinstance(row, dict) or row.get('fileId') not in file_ids or row['fileId'] in result:
                 raise ValueError('Invalid publication file')
             version, text = row.get('pipelineVersion'), row.get('text')
-            if version not in (1, 2) or (version == 2 and (not isinstance(text, str) or not text.strip() or len(text) > 20000)):
+            if version not in (1, 2, 3) or (version >= 2 and (not isinstance(text, str) or not text.strip() or len(text) > 20000)):
                 raise ValueError('Invalid published content')
             result[row['fileId']] = row
         return result
