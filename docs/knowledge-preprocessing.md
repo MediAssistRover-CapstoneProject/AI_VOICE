@@ -19,6 +19,9 @@ Search retrieves up to 20 candidates from OpenAI. The publication resolver calls
 `POST /api/v1/internal/knowledge/resolve` using `X-Knowledge-Token`, obtains only
 published files and complete BE chunk content, and builds context from at most
 five whole chunks. No generated title/source prefix is inserted into the text.
+BE pipeline v3 can withdraw an older item while leaving unrelated items from
+its source document published. AI Voice accepts only the currently published
+file IDs and content returned by BE; the robot and its API contract do not change.
 Source names and file IDs remain separate response metadata. Legacy BE-managed
 documents can use their original search snippets, without cutting them mid-text.
 

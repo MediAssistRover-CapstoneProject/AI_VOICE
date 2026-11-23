@@ -56,6 +56,17 @@ def test_search_and_generation_use_store_and_return_sources_without_answer_cache
     assert 'Giờ khám từ 7 giờ' in client.chat.completions.create.call_args.kwargs['messages'][0]['content']
 
 
+def test_version_three_uses_current_backend_text_not_stale_search_snippet(pipeline):
+    rag, client = pipeline
+    rag.hosted_store.resolver.resolve.return_value = {
+        'file-test': dict(fileId='file-test', title='Giờ khám.txt', pipelineVersion=3,
+                          text='Giờ khám từ 8 giờ đến 18 giờ.')}
+    rag.answer_question('Giờ khám?')
+    prompt = client.chat.completions.create.call_args.kwargs['messages'][0]['content']
+    assert 'Giờ khám từ 8 giờ đến 18 giờ.' in prompt
+    assert 'Giờ khám từ 7 giờ đến 17 giờ.' not in prompt
+
+
 def test_no_context_and_provider_failure_are_explicit(pipeline):
     rag, client = pipeline
     client.post.return_value = {'data': []}
